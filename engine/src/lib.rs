@@ -33,6 +33,13 @@ impl Book {
     fn best_crossing(&self,o:&Order)->Option<Uuid>{match o.side{Side::Long=>self.asks.iter().filter(|(p,q)|**p<=o.price_ticks && !q.is_empty()).next().and_then(|(_,q)|q.front()).copied(),Side::Short=>self.bids.iter().rev().filter(|(p,q)|**p>=o.price_ticks && !q.is_empty()).next().and_then(|(_,q)|q.front()).copied()}}
     pub fn cancel(&mut self,id:Uuid)->Result<Order,BookError>{let o=self.orders.remove(&id).ok_or(BookError::Unknown)?;for map in [&mut self.bids,&mut self.asks]{for q in map.values_mut(){q.retain(|x|*x!=id);}}Ok(o)}
     pub fn mid(&self)->Option<u64>{match (self.bids.keys().next_back(),self.asks.keys().next()){(Some(b),Some(a))=>Some((*b+*a)/2),_=>None}}
+    pub fn snapshot(&self)->(Vec<(u64,u64)>,Vec<(u64,u64)>){
+        let bids=self.bids.iter().rev().filter_map(|(p,q)|{let n=q.iter().filter_map(|id|self.orders.get(id).map(|o|o.remaining)).sum();(n>0).then_some((*p,n))}).collect();
+        let asks=self.asks.iter().filter_map(|(p,q)|{let n=q.iter().filter_map(|id|self.orders.get(id).map(|o|o.remaining)).sum();(n>0).then_some((*p,n))}).collect();
+        (bids,asks)
+    }
+    pub fn order(&self,id:Uuid)->Option<Order>{self.orders.get(&id).cloned()}
+    pub fn sequence(&self)->u64{self.seq}
 }
 pub fn payout(m:u64,cap:u64,s:u64)->(u64,u64){let x=s.min(cap);(m*x,m*(cap-x))}
 #[cfg(test)] mod tests {use super::*;fn o(owner:&str,side:Side,p:u64,q:u64,c:&str)->Order{Order{id:Uuid::nil(),client_id:c.into(),owner:owner.into(),side,price_ticks:p,qty:q,remaining:0,post_only:false,seq:0}}
