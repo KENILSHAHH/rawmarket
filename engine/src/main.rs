@@ -25,7 +25,26 @@ type Shared=Arc<Mutex<App>>;
 fn key(symbol:&str,claim:&str)->String{format!("{}:{}",symbol.to_uppercase(),claim.to_uppercase())}
 fn err(e:impl ToString)->(StatusCode,String){(StatusCode::BAD_REQUEST,e.to_string())}
 fn acct<'a>(app:&'a mut App,wallet:&str)->&'a mut Account{app.accounts.entry(wallet.to_string()).or_insert_with(||Account{wallet:wallet.to_string(),..Default::default()})}
-fn ensure_book(app:&mut App,k:&str){if app.books.contains_key(k){return}let symbol=k.split(':').next().unwrap_or("MILK");let p=app.markets.iter().find(|m|m.symbol==symbol).map(|m|m.reference).unwrap_or(12.5);let maker="demo-maker".to_string();acct(app,&maker).positions.insert(k.to_string(),Position{available:200,reserved:0});let mut b=Book::default();for (side,price,client) in [(Side::Short,p+0.08,"seed-ask"),(Side::Long,p-0.08,"seed-bid")]{let id=Uuid::new_v4();let _=b.place(Order{id,client_id:client.into(),owner:maker.clone(),side,price_ticks:(price*100.0).round() as u64,qty:100,remaining:100,post_only:false,seq:0});app.tracked.insert(id,Tracked{wallet:maker.clone(),key:k.into(),side,price,remaining:100});}app.books.insert(k.into(),b);}
+fn ensure_book(app:&mut App,k:&str){
+ if app.books.contains_key(k){return}
+ let symbol=k.split(':').next().unwrap_or("MILK");
+ let p=app.markets.iter().find(|m|m.symbol==symbol).map(|m|m.reference).unwrap_or(12.5);
+ let maker="demo-maker".to_string();
+ let maker_account=acct(app,&maker);
+ maker_account.cash=1_000_000.0;
+ maker_account.positions.entry(k.to_string()).or_insert(Position{available:10_000,reserved:0});
+ let step=(p*0.002).max(0.01);
+ let quantities=[100,150,200,250,300,400,500];
+ let mut b=Book::default();
+ for (i,qty) in quantities.into_iter().enumerate(){
+  for (side,price,client) in [(Side::Short,p+step*(i as f64+1.0),format!("seed-ask-{i}")),(Side::Long,p-step*(i as f64+1.0),format!("seed-bid-{i}"))]{
+   let ticks=(price*100.0).round() as u64; let displayed=ticks as f64/100.0; let id=Uuid::new_v4();
+   let _=b.place(Order{id,client_id:client,owner:maker.clone(),side,price_ticks:ticks,qty,remaining:qty,post_only:false,seq:0});
+   app.tracked.insert(id,Tracked{wallet:maker.clone(),key:k.into(),side,price:displayed,remaining:qty});
+  }
+ }
+ app.books.insert(k.into(),b);
+}
 fn view(app:&App,wallet:&str)->AccountView{let a=app.accounts.get(wallet).cloned().unwrap_or_else(||Account{wallet:wallet.into(),..Default::default()});AccountView{wallet:a.wallet,cash:a.cash,reserved_cash:a.reserved_cash,available_cash:a.cash-a.reserved_cash,positions:a.positions,open_orders:app.tracked.values().filter(|o|o.wallet==wallet&&o.remaining>0).count()}}
 fn ov(id:Uuid,o:&Tracked)->OrderView{OrderView{id,symbol:o.key.split(':').next().unwrap_or("").into(),claim:o.key.split(':').nth(1).unwrap_or("").into(),wallet:o.wallet.clone(),side:if o.side==Side::Long{"buy".into()}else{"sell".into()},price:o.price,remaining:o.remaining,status:if o.remaining==0{"filled/cancelled".into()}else{"open".into()}}}
 fn now()->u64{use std::time::{SystemTime,UNIX_EPOCH};SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs()}
