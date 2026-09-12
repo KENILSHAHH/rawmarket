@@ -15,6 +15,8 @@ Open http://localhost:3000. The UI uses a demo wallet and demo USD until Hedera 
 
 No Chainlink/Pyth feed is assumed. The oracle pipeline is source-document -> deterministic adapter -> signed report -> Hedera verifier -> settlement. The checked-in `sources/manifest.json` records exact source URLs and hashes captured on 2026-09-13. USDA report availability varies by product, so non-MILK markets are not presented as live until the 90-day audit is complete.
 
+Charts are source-backed OHLC candles, not generated curves. The current MILK fixture contains one verified USDA Class III observation dated 2026-09-02, so it is shown as a single candle. The 1D, 1W, 1M, 1Y, 5Y, and 25Y controls never fabricate missing history; unsupported ranges display no verified candles.
+
 ## Contract model
 
 Each series has a cap C and multiplier m. A long and complementary short are fully collateralized by m*C USD. At expiry: `long=m*clamp(S,0,C)` and `short=m*(C-clamp(S,0,C))`.
