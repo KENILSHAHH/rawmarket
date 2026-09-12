@@ -1,0 +1,13 @@
+{
+  "captured_at": "2026-09-13",
+  "hedera_prize": {"url":"https://ethglobal.com/events/ethonline2026/prizes/hedera","sha256":"1de8beefa53c5952c29bb8c02513f4a40d16da6d2f89f8d4f2d98bad02ef473d"},
+  "ats_readme": {"url":"https://raw.githubusercontent.com/hashgraph/asset-tokenization-studio/main/README.md","commit":"be4f860e408ec5b1a24d12feb6f872aabff69319","sha256":"ea1a15f0a39777537e0170089b1608315181f206bd88b4ffedca198daec6fa3f"},
+  "ats_sdk_readme": {"url":"https://raw.githubusercontent.com/hashgraph/asset-tokenization-studio/main/packages/ats/sdk/README.md","commit":"be4f860e408ec5b1a24d12feb6f872aabff69319","sha256":"d5bc5b554457b23dfa6a937260be4eee2c1fa15d27d2b5c44ff3fdbb149f88f"},
+  "hedera_scaffold": {"url":"https://github.com/hedera-dev/scaffold-hbar","commit":"5eb46ef3eaa8fae7613669fa6edcde4357ab7670"},
+  "cme_milk_specs": {"url":"https://www.cmegroup.com/markets/agriculture/dairy/class-iii-milk/specs","status":"accessed with browser-compatible source; archive pending"},
+  "usda_milk": {"url":"https://www.ams.usda.gov/mnreports/dymclassprices.pdf","sha256":"b23e3b93b5cc2248d3870a92d26156d748ceae14fa4853d1b269e46ccb8c39ad","captured_report_date":"2026-09-02"},
+  "usda_potato": {"url":"https://www.ams.usda.gov/mnreports/fvdidnop.pdf","sha256":"d4cc67db7df77f505c53b04f24ae28c2543388d9a422843dcc6e38a4e4b84d5e","captured_report_date":"2026-09-11"},
+  "usda_tomato": {"url":"https://www.ams.usda.gov/mnreports/fvdtomf.pdf","sha256":"cbff312a5b8c53a1c09ecaab7a706b6f0a730e1ad11fd64425f8bfb0c73d6a06","captured_report_date":"2026-09-11"},
+  "usda_fob": {"url":"https://www.ams.usda.gov/mnreports/fvdfob.pdf","sha256":"f7f97db2f5a6f7235667ea564eb55c7eb5fd2e331515fa250e99f98dfc8d2f10","captured_report_date":"2026-09-11"},
+  "grain_source_policy": "USDA AMS/NASS publication adapters to be enabled only after 90-day audit; no contracts issued while status is historical/demo."
+}
