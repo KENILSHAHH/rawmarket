@@ -1,39 +1,51 @@
-# RawMarket — three-minute demo script
+# RawMarket — three-minute product demo
 
-## 0:00–0:25 — Problem and product
+## 0:00–0:25 — Product
 
-**On screen:** Open the live terminal with MILK selected.
+**On screen:** Open RawMarket with MILK/USD selected.
 
-“RawMarket is a Hedera-powered spot venue for tokenized US commodity benchmarks. It gives products such as milk, potatoes, tomatoes and grains a professional exchange interface while clearly showing each benchmark, quotation unit, source quality and testnet status.”
+“RawMarket is a spot exchange for tokenized US commodity benchmarks. It combines a professional trading terminal, a deterministic Rust order book, verified public price history, and Hedera-native asset controls. There is no leverage or naked shorting: every sell must be backed by inventory.”
 
-## 0:25–0:55 — Market and benchmark
+## 0:25–0:50 — Market data
 
-**On screen:** Point to Reference, Best Bid, Best Ask and the source badge on the chart.
+**On screen:** Show the MILK chart, change the time range, and point to the source label.
 
-“I’ll use US Class III Milk, quoted in dollars per hundredweight from the official USDA announcement. RawMarket keeps the reference, order-book quotes, last fill and final fixing separate. A market-maker quote can never replace a missing benchmark, so unsupported history displays no verified candles instead of a fabricated chart.”
+“This market follows the USDA Class III Milk benchmark in dollars per hundredweight. The chart uses archived official monthly observations rather than generated prices. RawMarket keeps the external benchmark, order-book bid and ask, matched trade price, and settlement value separate.”
 
-## 0:55–1:25 — Architecture
+## 0:50–1:15 — Architecture
 
-**On screen:** Keep the live engine badge and sequence number visible.
+**On screen:** Show market depth and the order ticket.
 
-“The Next.js 16 terminal runs on Vercel. Live orders go to a Rust Axum engine on AWS App Runner. Its deterministic CLOB uses integer ticks, whole lots and price-time priority, with limit, post-only and immediate-or-cancel market orders, partial fills, cancellation, self-trade prevention and balance reservations.”
+“The frontend is built with Next.js and TradingView Lightweight Charts. Orders are sent to a Rust Axum matching engine on AWS. The CLOB uses integer ticks, whole lots, price-time priority, balance reservations, partial fills, post-only orders, cancellation, self-trade prevention, and idempotent client order IDs.”
 
-## 1:25–2:10 — Place a real demo order
+## 1:15–1:55 — ATS asset and compliance
 
-**On screen:** Fund the wallet, select Market, buy one MILK, then show My Fills. Place and cancel a resting limit bid if time permits.
+**On screen:** Open the selected asset’s Hedera panel and its HashScan links.
 
-“I’ll fund a unique test wallet with ten thousand demo dollars. The red levels are live depth from the AWS order book. I choose Market and buy one MILK. It executes at the resting ask: ask size decreases, the sequence advances, cash decreases and inventory increases. The fill appears in Recent Trades and My Fills.”
+“The commodity asset is issued through Hedera Asset Tokenization Studio using the official SDK. ATS gives the asset its ERC-1400 lifecycle and partition-aware controls. ERC-3643 support connects an identity registry and compliance module, so eligibility is checked as part of controlled transfer operations rather than being a label in our database.”
 
-“Next I place a limit bid below the market. It appears in Open Orders and reserves cash. Cancelling it releases that reservation. Sell orders require inventory, so naked shorting is rejected.”
+“The same asset exposes hold and redemption operations. A hold reserves owned units without changing beneficial ownership, and redemption removes settled units through the governed token lifecycle. These controls are provided by ATS; RawMarket adds the commodity methodology and exchange workflow.”
 
-## 2:10–2:45 — Hedera
+## 1:55–2:35 — Place and verify an order
 
-**On screen:** Open the HashScan contract link from the terminal header or footer.
+**On screen:** Fund the test account, place a MILK limit or market order, then open Order history.
 
-“Hedera is the public asset and settlement layer. RawMarket has a testnet EVM registry, eight series and interim HTS token IDs visible on HashScan. We also pinned Asset Tokenization Studio and deployed its BLR proxy and initial facets. ATS supplies controlled issuance, transfer controls, holds and redemption; RawMarket adds benchmark and exchange logic.”
+“I’ll place an order against the live Rust book. The engine validates available cash or inventory and executes at the resting price. After accepting the order, it writes an immutable receipt to Hedera containing the hashed order ID, market, side, integer price, quantity, and engine sequence.”
 
-## 2:45–3:00 — Close
+**On screen:** Click the Hedera receipt in Order history.
 
-**On screen:** Return to the market directory and show the explicit live/historical labels.
+“The returned native transaction ID opens the exact successful transaction in HashScan. Mirror Node independently exposes the contract result and emitted event, so this acknowledgement is publicly verifiable.”
 
-“RawMarket combines source evidence, deterministic matching and Hedera tokenization in one auditable venue. Milk is the priority demo; other markets remain clearly labelled historical until their coverage audits pass.”
+## 2:35–2:55 — Position lifecycle
+
+**On screen:** Show the ATS partition balance, hold status, transfer eligibility, and redemption transaction.
+
+"For the deployed asset lifecycle, RawMarket uses ATS partition operations and ERC-3643 eligibility. The interface distinguishes an order acknowledgement from asset settlement, and exposes the corresponding Hedera transaction IDs instead of treating an off-chain match as final."
+
+## 2:55–3:00 — Close
+
+**On screen:** Return to the terminal overview.
+
+“RawMarket brings transparent commodity data, deterministic exchange execution, and governed Hedera tokenization into one auditable trading venue.”
+
+The ATS asset, identity registry, compliance module, partition issuance, hold, release, and redemption transactions are confirmed in `deployments/hedera-testnet.json`.

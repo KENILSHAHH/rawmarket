@@ -4,6 +4,20 @@ export const ENGINE_URL=process.env.NEXT_PUBLIC_ENGINE_URL||'http://localhost:80
 export const HASHSCAN_URL='https://hashscan.io/testnet/contract/0x553678C79D4F38d0C7b1297824048887059AD7BA';
 export const hashscanTransactionUrl=(transactionId:string)=>`https://hashscan.io/testnet/transaction/${transactionId}`;
 export const REPOSITORY_URL='https://github.com/KENILSHAHH/rawmarket';
+export const ATS_MILK={
+  asset:'0.0.10525401',
+  assetUrl:'https://hashscan.io/testnet/contract/0.0.10525401',
+  factory:'0.0.9213391',
+  factoryUrl:'https://hashscan.io/testnet/contract/0.0.9213391',
+  eligibility:'0x3229b6f48152cc7A8a1Cb39Dd56d9728780113A2',
+  eligibilityUrl:'https://hashscan.io/testnet/contract/0x3229b6f48152cc7A8a1Cb39Dd56d9728780113A2',
+  lifecycle:[
+    {label:'Issue',transactionId:'0.0.7314364@1789314855.741729447'},
+    {label:'Hold',transactionId:'0.0.7314364@1789314878.831695254'},
+    {label:'Release',transactionId:'0.0.7314364@1789314898.959775823'},
+    {label:'Redeem',transactionId:'0.0.7314364@1789314918.105998928'},
+  ],
+} as const;
 export const TIME_RANGES=['1D','1W','1M','3M','1Y','5Y','25Y'] as const;
 
 export const EMPTY_ACCOUNT:Account={wallet:'',cash:0,reserved_cash:0,available_cash:0,positions:{},open_orders:0,funded:false};

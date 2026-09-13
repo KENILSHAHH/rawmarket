@@ -44,3 +44,4 @@ footer{height:28px}footer a,footer button{display:flex;align-items:center;gap:3p
 .toast span a{display:block;margin-top:3px;color:var(--mint);font-weight:700}
 .receipt-link{display:inline-flex;align-items:center;gap:4px;color:var(--mint);font-weight:700}
 .receipt-pending{color:var(--muted-2)}
+.ats-evidence{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 14px}.ats-evidence>span{width:100%;color:var(--muted);font-size:9px;text-transform:uppercase}.ats-evidence>a{display:inline-flex;align-items:center;gap:4px;border:1px solid #23453b;border-radius:4px;padding:6px 8px;color:var(--mint);font:9px var(--mono);background:#0e1a17}

@@ -3,6 +3,7 @@
 import {useCallback,useEffect,useMemo,useState} from 'react';
 import {apiRequest} from '@/lib/api';
 import {EMPTY_ACCOUNT,FALLBACK_MARKETS} from '@/lib/constants';
+import {connectAtsWallet} from '@/lib/hedera/ats';
 import type {Account,Book,CandleResponse,DockTab,Market,Order,OrderType,Side,Toast,Trade} from '@/lib/types';
 
 const EMPTY_CANDLES:CandleResponse={interval:'5Y',frequency:'unavailable',source_status:'Loading source data',coverage:'',candles:[]};
@@ -68,7 +69,7 @@ export function useTradingTerminal(){
   useEffect(()=>{void refreshAccount();const timer=setInterval(()=>void refreshAccount(),3000);return()=>clearInterval(timer)},[refreshAccount]);
 
   const chooseMarket=(next:string)=>{setSymbol(next);setMarketMenu(false);setSearch('');setToast(null)};
-  const connect=async()=>{if(!wallet)return;setSubmitting(true);try{const next=await apiRequest<Account>('/api/fund',{method:'POST',body:JSON.stringify({wallet,amount:10000})});setAccount(next);setConnected(true);setToast({kind:'success',message:'Account connected'})}catch(error){setToast({kind:'error',message:error instanceof Error?error.message:'Connection failed'})}finally{setSubmitting(false)}};
+  const connect=async()=>{setSubmitting(true);try{const address=await connectAtsWallet();localStorage.setItem('rawmarket-wallet',address);setWallet(address);const next=await apiRequest<Account>('/api/fund',{method:'POST',body:JSON.stringify({wallet:address,amount:10000})});setAccount(next);setConnected(true);setToast({kind:'success',message:'Hedera wallet connected · test funds credited'})}catch(error){setToast({kind:'error',message:error instanceof Error?error.message:'Wallet connection failed'})}finally{setSubmitting(false)}};
   const submit=async()=>{
     if(!connected){await connect();return}
     const amount=Number(qty);

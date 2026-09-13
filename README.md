@@ -115,11 +115,13 @@ These tokens are development assets. Trading balances in the current terminal re
 
 ### Asset Tokenization Studio
 
-RawMarket pins Hedera Asset Tokenization Studio as the controlled-asset layer. ATS provides issuance, ownership controls, roles, holds, transfer restrictions, partition-aware operations, and redemption lifecycle primitives.
+RawMarket integrates `@hashgraph/asset-tokenization-sdk` v8.0.0 as its controlled-asset application layer. The testnet bootstrap connects to the official ATS factory and resolver, creates the MILK claim through the factory, grants least-purpose issuer and locker roles, and exercises ERC-1400 issuance by partition, hold, release, and redemption operations.
+
+ERC-3643 transfer eligibility is supplied through the deployed `RawMarketEligibility` identity registry and compliance module. The same allowlist is queried through `isVerified` and `canTransfer`, while ATS remains responsible for enforcing the configured registry and compliance hooks around token operations.
 
 RawMarket supplies the domain-specific components ATS does not provide: commodity benchmark methodology, deterministic matching, reservation accounting, oracle reports, collateral rules, and variable-payoff settlement logic.
 
-The testnet ATS deployment currently includes ProxyAdmin, the Business Logic Resolver implementation and proxy, and 28 deployed facets. Factory configuration and ATS-issued RawMarket assets are not yet complete. The interim HTS tokens are therefore not described as ATS-issued assets.
+The application pins ATS v8.0.0. MILK is the first ATS-issued market asset; the other listed products retain clearly separated plain HTS development tokens until their data audits and ATS issuance are complete. Deployment identifiers and every lifecycle transaction are recorded in `deployments/hedera-testnet.json`.
 
 ### Mirror Node and HashScan
 
@@ -131,7 +133,10 @@ Mirror Node is the independent read path used to resolve contract results, nativ
 | --- | --- |
 | Order receipt contract | [`0x2D9e26E2558A527B41C61d753305e28b1D611FF3`](https://hashscan.io/testnet/contract/0x2D9e26E2558A527B41C61d753305e28b1D611FF3) |
 | Settlement registry | [`0x553678C79D4F38d0C7b1297824048887059AD7BA`](https://hashscan.io/testnet/contract/0x553678C79D4F38d0C7b1297824048887059AD7BA) |
-| ATS BLR proxy | [`0xf0433BeF9a0838323D57b4a6cbE6976CE66A0A26`](https://hashscan.io/testnet/contract/0xf0433BeF9a0838323D57b4a6cbE6976CE66A0A26) |
+| Official ATS factory | [`0.0.9213391`](https://hashscan.io/testnet/contract/0.0.9213391) |
+| Official ATS resolver | [`0.0.9212226`](https://hashscan.io/testnet/contract/0.0.9212226) |
+| ATS-issued MILK claim | [`0.0.10525401`](https://hashscan.io/testnet/contract/0.0.10525401) |
+| ERC-3643 identity/compliance module | [`0x3229b6f48152cc7A8a1Cb39Dd56d9728780113A2`](https://hashscan.io/testnet/contract/0x3229b6f48152cc7A8a1Cb39Dd56d9728780113A2) |
 | Demo USD | [`0.0.10522368`](https://hashscan.io/testnet/token/0.0.10522368) |
 | MILK | [`0.0.10522374`](https://hashscan.io/testnet/token/0.0.10522374) |
 | POTATO | [`0.0.10522375`](https://hashscan.io/testnet/token/0.0.10522375) |
@@ -143,6 +148,8 @@ Mirror Node is the independent read path used to resolve contract results, nativ
 | DRY BEAN | [`0.0.10522382`](https://hashscan.io/testnet/token/0.0.10522382) |
 
 The machine-readable deployment record is maintained in `deployments/hedera-testnet.json`.
+
+The MILK lifecycle can be independently inspected on HashScan: [factory issuance](https://hashscan.io/testnet/transaction/0.0.7314364@1789314423.485781604), [partition issuance](https://hashscan.io/testnet/transaction/0.0.7314364@1789314855.741729447), [hold](https://hashscan.io/testnet/transaction/0.0.7314364@1789314878.831695254), [release](https://hashscan.io/testnet/transaction/0.0.7314364@1789314898.959775823), and [redemption](https://hashscan.io/testnet/transaction/0.0.7314364@1789314918.105998928).
 
 ## Repository structure
 

@@ -8,6 +8,8 @@
   "order_receipts_contract": "0x2D9e26E2558A527B41C61d753305e28b1D611FF3",
   "order_receipts_deployment_transaction": "0x617cad1d7402c2c459d5ab1056809b864f686daeb6d1128af5f7331a4ea7eccc",
   "hashscan_order_receipts": "https://hashscan.io/testnet/contract/0x2D9e26E2558A527B41C61d753305e28b1D611FF3",
+  "erc3643_eligibility_contract": "0x3229b6f48152cc7A8a1Cb39Dd56d9728780113A2",
+  "erc3643_eligibility_deployment_transaction": "0xf33d06bb0859e6a3ceb4d9085687fc6b79997af0f90c2b776479902af39faca4",
   "series": {
     "MILK": {"id": "0x4d494c4b00000000000000000000000000000000000000000000000000000000", "multiplier": 2000, "cap": 25},
     "POTATO": {"id": "0x504f5441544f0000000000000000000000000000000000000000000000000000", "multiplier": 1, "cap": 35},
@@ -18,7 +20,42 @@
     "SOYBEAN": {"id": "0x534f594245414e00000000000000000000000000000000000000000000000000", "multiplier": 1, "cap": 25},
     "DRY_BEAN": {"id": "0x4452595f4245414e000000000000000000000000000000000000000000000000", "multiplier": 1, "cap": 80}
   },
-  "ats_status": "partial deployment; infrastructure and 28 facets confirmed, deployment paused for more testnet HBAR",
+  "ats_status": "MILK asset issued through the official ATS v8 testnet factory; ERC-3643 wiring and ERC-1400 issue, hold, release, and redemption confirmed",
+  "ats_sdk_version": "8.0.0",
+  "ats_official_factory": {
+    "contract_id": "0.0.9213391",
+    "evm_address": "0xd1f118a40f3b02883d35909ef2517e7edd78379d"
+  },
+  "ats_official_resolver": {
+    "contract_id": "0.0.9212226",
+    "evm_address": "0xba2d5fc2083a0b8f164c50e65d782087fba18e0a"
+  },
+  "ats_assets": {
+    "MILK": {
+      "contract_id": "0.0.10525401",
+      "evm_address": "0xe50d819ea31c4eaa6b78e4b826db611959a72074",
+      "name": "RawMarket Class III Milk Claim",
+      "symbol": "RMMILK26",
+      "isin": "USRMILK00027",
+      "default_partition": "0x0000000000000000000000000000000000000000000000000000000000000001",
+      "compliance_contract": "0x3229b6f48152cc7A8a1Cb39Dd56d9728780113A2",
+      "identity_registry_contract": "0x3229b6f48152cc7A8a1Cb39Dd56d9728780113A2",
+      "verified_state": {
+        "total_supply": "1998",
+        "operator_balance": "1998",
+        "operator_eligible": true
+      },
+      "transactions": {
+        "create": {"evm_hash": "0x79f2778df0a348e994a0f855826f21f623c67fa63f88515019e299ea3d3ae388", "hedera_id": "0.0.7314364@1789314423.485781604"},
+        "grant_issuer": {"evm_hash": "0x1a98a8e4e6068f37fc8bfea4db4cf1e05ca7fbea94403d87575be77c68918cbd", "hedera_id": "0.0.7314364@1789314441.909220835"},
+        "grant_locker": {"evm_hash": "0x79bd801a323206848ea14c15dc5c33a25aa208e11f7937935074380b98ea571f", "hedera_id": "0.0.7314364@1789314447.299390436"},
+        "issue_by_partition": {"evm_hash": "0x5939e0ab26efab0826fcd510fb0c5c187a4cf4ceabb5d86ee989545782496f91", "hedera_id": "0.0.7314364@1789314855.741729447"},
+        "create_hold": {"evm_hash": "0x6431dd40d8e27327a954ffb565f077d64e6bae3b849401fe675701c7d0928913", "hedera_id": "0.0.7314364@1789314878.831695254"},
+        "release_hold": {"evm_hash": "0xdd401ed71afe932416fc7086b1b552cc64ac6dc6e46602265895596679b33bb3", "hedera_id": "0.0.7314364@1789314898.959775823"},
+        "redeem_by_partition": {"evm_hash": "0x5654b50a7376fe24cad3da5b0dbe19de442ce1a310bbe2e5db5a5bf1c0a0e480", "hedera_id": "0.0.7314364@1789314918.105998928"}
+      }
+    }
+  },
   "ats_checkpoint": "hedera-testnet-2026-09-13T11-39-30-743",
   "ats_partial_infrastructure": {
     "proxy_admin": "0x63c67F5b2Ba9B68E699a236EA70Bed36239C805D",

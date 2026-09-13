@@ -6,17 +6,17 @@ RawMarket
 
 ## Short description
 
-Trade tokenized US commodity benchmarks through a Rust order book and Hedera.
+Trade tokenized US commodities through a Rust order book with Hedera ATS controls.
 
-_77 characters including spaces._
+_82 characters including spaces._
 
 ## Description
 
-RawMarket is a 24/7 spot trading venue for transparent, tokenized US commodity benchmark assets. It gives commodities such as Class III milk, Russet potatoes, round tomatoes, wheat, corn, rice, soybeans and dry beans a professional exchange interface with visible bid/ask depth, source-labelled candlestick data, market and limit orders, cash reservations, inventory controls, personal fills and cancellable open orders.
+RawMarket is a professional spot trading venue for tokenized US commodity benchmarks, beginning with USDA Class III Milk and expanding to potatoes, tomatoes, wheat, corn, rice, soybeans, and dry beans. Users can inspect source-labelled candlestick history and live order-book depth, fund a test account, place market or limit orders, manage inventory, review fills, and open immutable Hedera receipts from order history. The product separates benchmark data, exchange prices, and blockchain lifecycle state so each remains independently auditable.
 
 The core product principle is that reference data and trading data must never be confused. RawMarket keeps the official or methodology-defined benchmark, order-book bid and ask, last engine-confirmed fill, portfolio mark and final settlement fixing separate. Missing USDA observations remain visibly missing; the interface never draws synthetic history or substitutes a market-maker quote for a benchmark.
 
-The public demo is live. Its Next.js terminal sends real order commands to a Rust central limit order book running on AWS. The Hedera testnet deployment provides a public EVM settlement-registry contract, eight configured series, interim HTS test assets and a pinned, partially deployed Asset Tokenization Studio infrastructure path. Test balances and liquidity are explicitly labelled demo data and have no monetary value.
+The public demo is live. Its Next.js terminal sends real order commands to a Rust central limit order book running on AWS. On Hedera testnet, RawMarket has a public order-receipt contract, a settlement registry, interim HTS test assets, and an ATS-issued MILK claim with ERC-3643 compliance wiring and confirmed ERC-1400 lifecycle transactions. Test balances and liquidity are explicitly labelled demo data and have no monetary value.
 
 ## How it is made
 
@@ -26,7 +26,7 @@ The matching engine is written in Rust with Tokio and Axum. Its pure book uses i
 
 The engine is packaged as a non-root Linux container. AWS CodeBuild builds the x86-64 image, private ECR stores it, and App Runner supplies the public TLS endpoint and health checks. Vercel receives that endpoint through `NEXT_PUBLIC_ENGINE_URL`.
 
-On Hedera testnet we deployed a Solidity settlement-registry extension through the EVM JSON-RPC relay, created eight commodity series and created interim fungible HTS test assets with public token IDs. We pinned Hedera Asset Tokenization Studio at commit `be4f860e408ec5b1a24d12feb6f872aabff69319` and deployed its ProxyAdmin, Business Logic Resolver implementation/proxy and the first 28 facets before the testnet operator exhausted its faucet allocation. ATS is valuable because it supplies controlled issuance, ownership, holds, transfer restrictions, roles and redemption primitives; RawMarket supplies the commodity methodology, deterministic matcher, reservation model, oracle-report shape and settlement-specific logic ATS does not provide.
+RawMarket combines a Next.js and TypeScript trading terminal with a deterministic Rust/Axum central limit order book hosted on AWS. The matcher uses integer ticks, price-time priority, reservations, partial fills, post-only orders, cancellation, and self-trade prevention. Hedera records every accepted order through an EVM receipt contract, with Mirror Node resolving native transaction IDs for HashScan links. The application pins Hedera’s official Asset Tokenization Studio SDK v8.0.0 and creates the MILK asset through the official ATS testnet factory. Its ERC-3643 identity registry and compliance hooks enforce eligibility, while confirmed ERC-1400 transactions demonstrate partition issuance, a hold, release, and redemption. HTS development token identities remain clearly distinguished from the ATS-issued asset.
 
 The most notable hack is deliberate restraint: source reports and hashes are archived in the repository, and the chart refuses to fabricate missing history. We also used cloud-native CodeBuild to produce the Rust container without relying on a local Docker daemon.
 
@@ -36,7 +36,7 @@ RawMarket uses Hedera in three distinct layers:
 
 1. **Hedera Smart Contract Service / EVM relay** for the deployed series and settlement-registry extension.
 2. **Hedera Token Service** for public interim test token identities, supply controls and Mirror Node visibility.
-3. **Asset Tokenization Studio** as the pinned security-token lifecycle and transfer-control layer. Its BLR infrastructure is deployed partially; ATS factory configuration and ATS-issued commodity assets are not claimed as complete.
+3. **Asset Tokenization Studio** as the pinned controlled-token lifecycle and transfer-control layer. The MILK claim was created through the official ATS factory and its issuance, hold, release, and redemption are publicly verifiable.
 
 This separation matters. ATS is not described as a derivatives engine, and plain HTS test tokens are not described as ATS security tokens.
 
@@ -69,7 +69,7 @@ Hedera, Asset Tokenization Studio, HTS, Hedera Smart Contract Service, Solidity,
 - The AWS engine holds books and demo balances in memory; an App Runner replacement resets them.
 - Browser identities are test identities, not authenticated Hedera wallets.
 - Engine fills are real CLOB executions but are not yet atomic HTS/ATS transfers.
-- HTS assets are interim plain test tokens; ATS-issued commodity assets are pending completion of the pinned ATS deployment.
+- MILK has an ATS-issued testnet asset; the other market symbols still use interim plain HTS development identities.
 - The deployed Solidity contract is a prototype settlement registry. Its current signature array is not a production threshold-signature verifier and `claim` records accounting state rather than transferring collateral.
 - MILK has one archived verified fixing in the demo. Produce, grain and pulse markets remain historical/demo until their 90-day coverage audits and deterministic adapters pass.
 
