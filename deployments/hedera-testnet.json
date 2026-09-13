@@ -5,6 +5,9 @@
   "settlement_contract": "0x553678C79D4F38d0C7b1297824048887059AD7BA",
   "settlement_deployment_transaction": "0xdd3859b55287b28c7e297af0ea37a22ad6f75827236162c060af73db279d4544",
   "hashscan_contract": "https://hashscan.io/testnet/contract/0x553678C79D4F38d0C7b1297824048887059AD7BA",
+  "order_receipts_contract": "0x2D9e26E2558A527B41C61d753305e28b1D611FF3",
+  "order_receipts_deployment_transaction": "0x617cad1d7402c2c459d5ab1056809b864f686daeb6d1128af5f7331a4ea7eccc",
+  "hashscan_order_receipts": "https://hashscan.io/testnet/contract/0x2D9e26E2558A527B41C61d753305e28b1D611FF3",
   "series": {
     "MILK": {"id": "0x4d494c4b00000000000000000000000000000000000000000000000000000000", "multiplier": 2000, "cap": 25},
     "POTATO": {"id": "0x504f5441544f0000000000000000000000000000000000000000000000000000", "multiplier": 1, "cap": 35},

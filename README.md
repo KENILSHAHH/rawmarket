@@ -64,7 +64,7 @@ Archived USDA evidence ──► deterministic importer ──► embedded histo
 Hedera testnet: EVM registry + interim HTS tokens + partial ATS infrastructure
 ```
 
-The terminal-to-CLOB path is implemented and live. The CLOB-to-Hedera arrow is the next integration boundary: current engine fills do not automatically transfer HTS/ATS assets.
+The terminal-to-CLOB path is implemented and live. Every accepted user order is also acknowledged by the deployed `RawMarketOrderReceipts` contract, and its confirmed transaction is linked from the terminal through HashScan. This receipt proves order acceptance metadata; current engine fills still do not atomically transfer HTS/ATS assets.
 
 ### 1. Discover a market
 
@@ -233,6 +233,7 @@ The public deployment record is [`deployments/hedera-testnet.json`](deployments/
 | Component | Public identifier | Status |
 | --- | --- | --- |
 | RawMarket settlement contract | `0x553678C79D4F38d0C7b1297824048887059AD7BA` | Deployed |
+| RawMarket order receipt contract | `0x2D9e26E2558A527B41C61d753305e28b1D611FF3` | Deployed and connected to the engine |
 | Deployment transaction | `0xdd3859b55287b28c7e297af0ea37a22ad6f75827236162c060af73db279d4544` | Confirmed |
 | Demo USD | `0.0.10522368` | Plain HTS interim token |
 | MILK spot token | `0.0.10522374` | Plain HTS interim token |
@@ -269,7 +270,7 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
-The current local UI uses the demo wallet and Rust API. It does not yet sign HashPack/MetaMask transactions or spend a user’s Hedera account. Testnet IDs shown in the deployment record are public evidence, not a claim that the local order ticket has already been fully wired to them.
+The current UI uses a demo wallet and Rust API. The AWS engine signs the order-receipt transaction through a least-privilege server-side testnet operator key; the browser does not yet sign HashPack/MetaMask transactions or spend a user’s Hedera account. Receipt IDs are public evidence of engine acknowledgement, not proof of HTS payment/asset settlement.
 
 ## Verification
 
@@ -308,7 +309,7 @@ The next required work is not cosmetic:
 - implement settlement transaction submission, confirmation, replay protection, and unknown-transaction reconciliation;
 - implement threshold-signed oracle reports and finalization rules;
 - persist engine commands and snapshots;
-- expose token IDs and transaction IDs in the UI;
+- expose asset-settlement token and transaction IDs in each fill;
 - add eligibility revocation and ATS hold behavior tests; and
 - complete the 90-day data audits before promoting produce and grain markets.
 

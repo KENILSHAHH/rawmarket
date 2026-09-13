@@ -115,7 +115,7 @@ Returns the local demo account, cash reservations, inventory, and open-order cou
 
 ### `GET /api/orders/{wallet}`
 
-Returns the wallet's order history, including `limit`/`market` type, original quantity, filled quantity, remaining quantity and the distinct `open`, `partially_filled`, `filled`, `cancelled`, or `expired` state.
+Returns the wallet's order history, including `limit`/`market` type, original quantity, filled quantity, remaining quantity, order state, and the Hedera receipt status/identifiers. A confirmed receipt is an immutable order acknowledgement, not proof of token/payment settlement.
 
 ### `GET /api/fills/{wallet}`
 
@@ -181,12 +181,15 @@ The response is an array because one taker order can produce multiple fills and 
     "qty":5,
     "filled":5,
     "remaining":0,
-    "status":"filled"
+    "status":"filled",
+    "hedera_tx_hash":"0x…",
+    "hedera_transaction_id":"0.0.7314364@1789311435.571365944",
+    "hedera_status":"confirmed"
   }
 ]
 ```
 
-The engine now separates `open`, `partially_filled`, `filled`, `cancelled`, and IOC `expired` states. Hedera integration must add `matched_pending_settlement`, `settled`, and `settlement_failed` without conflating a match with chain finality.
+The engine separates `open`, `partially_filled`, `filled`, `cancelled`, and IOC `expired` states. It separately records `hedera_status` for the order acknowledgement. Asset settlement must still add `matched_pending_settlement`, `settled`, and `settlement_failed` without conflating a match or receipt with chain finality.
 
 ### `DELETE /api/orders/{id}`
 

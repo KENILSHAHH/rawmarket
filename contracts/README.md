@@ -2,6 +2,8 @@
 
 `RawMarketSettlement.sol` is the prototype series, oracle-sequence and claim-accounting registry used by the RawMarket testnet demo.
 
+`RawMarketOrderReceipts.sol` is the live order-acknowledgement registry. The AWS engine submits one operator-signed `OrderRecorded` event for each accepted user order and returns the confirmed Hedera transaction ID to the terminal. This is public order evidence, not an HTS asset/payment settlement.
+
 ## Deployed testnet instance
 
 - Network: Hedera testnet
@@ -9,6 +11,7 @@
 - Deployment transaction: `0xdd3859b55287b28c7e297af0ea37a22ad6f75827236162c060af73db279d4544`
 - Explorer: [HashScan](https://hashscan.io/testnet/contract/0x553678C79D4F38d0C7b1297824048887059AD7BA)
 - Public artifact record: [`deployments/hedera-testnet.json`](../deployments/hedera-testnet.json)
+- Order receipt contract: [`0x2D9e…1FF3`](https://hashscan.io/testnet/contract/0x2D9e26E2558A527B41C61d753305e28b1D611FF3)
 
 Eight commodity series are configured in this deployment.
 

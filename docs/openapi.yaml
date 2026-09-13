@@ -289,7 +289,7 @@ components:
         order_type: {type: string, enum: [limit, market], default: limit}
     Order:
       type: object
-      required: [id, symbol, claim, wallet, side, order_type, price, qty, filled, remaining, status, created_at]
+      required: [id, symbol, claim, wallet, side, order_type, price, qty, filled, remaining, status, created_at, hedera_status]
       properties:
         id: {type: string, format: uuid}
         symbol: {type: string}
@@ -303,6 +303,9 @@ components:
         remaining: {type: integer, format: uint64}
         status: {type: string, enum: [open, partially_filled, filled, cancelled, expired]}
         created_at: {type: integer, format: uint64}
+        hedera_tx_hash: {type: string, nullable: true, description: EVM transaction hash for the Hedera order-receipt call}
+        hedera_transaction_id: {type: string, nullable: true, description: Native Hedera transaction ID suitable for HashScan}
+        hedera_status: {type: string, enum: [pending, confirmed, failed, unavailable, not_applicable]}
     Trade:
       type: object
       properties:

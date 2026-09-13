@@ -9,16 +9,27 @@ Browser / Next.js terminal
           │ REST over TLS
           ▼
 Rust CLOB on AWS App Runner
-          │ proposed settlement boundary
+          │ accepted-order receipt (live)
           ▼
 Hedera testnet
+  ├── RawMarket EVM order receipt registry
   ├── RawMarket EVM settlement registry
   ├── interim HTS test assets
   ├── partial ATS BLR infrastructure
   └── Mirror Node / HashScan evidence
 ```
 
-The upper path is live: the browser sends real demo orders to the AWS-hosted matcher. The final engine-to-Hedera transfer arrow is an architectural boundary, not a completed atomic transfer integration.
+The browser sends real demo orders to the AWS-hosted matcher. For each accepted user order, the engine signs a Hedera EVM call to `RawMarketOrderReceipts`, waits for consensus, resolves the native transaction ID through Mirror Node, and returns both identifiers to the terminal. Users can open that exact transaction on HashScan from the success notice or Order history. Asset/payment settlement remains a separate, unfinished boundary.
+
+## Live order receipts
+
+| Item | Value |
+| --- | --- |
+| Contract | `0x2D9e26E2558A527B41C61d753305e28b1D611FF3` |
+| Deployment transaction | `0x617cad1d7402c2c459d5ab1056809b864f686daeb6d1128af5f7331a4ea7eccc` |
+| Explorer | [HashScan](https://hashscan.io/testnet/contract/0x2D9e26E2558A527B41C61d753305e28b1D611FF3) |
+
+The event commits the hashed engine order ID, symbol, hashed browser-wallet reference, side, integer price ticks, quantity and monotonic engine sequence. The operator key is supplied to AWS App Runner through AWS Secrets Manager and is not built into the image or repository. Seeded demo-liquidity orders are not submitted on-chain.
 
 ## Deployed EVM contract
 
@@ -39,7 +50,7 @@ The deployed contract is not yet a collateral vault:
 - `finalize` is operator-gated and checks that at least one signature byte array exists, but it does not cryptographically verify a threshold signer set;
 - `recordClaim` accepts operator-supplied claim quantities;
 - `claim` clears and emits claimable accounting but does not transfer HTS collateral; and
-- the browser order path is not yet connected to contract calls.
+- the browser order path records an acknowledgement event, but does not yet execute an atomic token/payment transfer.
 
 Production settlement therefore requires a new audited deployment, not merely a UI switch.
 

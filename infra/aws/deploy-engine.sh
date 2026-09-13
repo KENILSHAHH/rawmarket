@@ -13,6 +13,8 @@ SOURCE_KEY="engine/source.zip"
 CODEBUILD_ROLE="rawmarket-codebuild-role"
 CODEBUILD_PROJECT="rawmarket-engine-build"
 APPRUNNER_ROLE="rawmarket-apprunner-ecr-role"
+APPRUNNER_INSTANCE_ROLE="rawmarket-engine-instance-role"
+HEDERA_RECEIPT_CONTRACT="${HEDERA_RECEIPT_CONTRACT:-0x2D9e26E2558A527B41C61d753305e28b1D611FF3}"
 IMAGE_URI="$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:$IMAGE_TAG"
 
 if ! aws ecr describe-repositories --region "$AWS_REGION" --repository-names "$ECR_REPOSITORY" >/dev/null 2>&1; then
@@ -89,12 +91,30 @@ aws iam attach-role-policy --role-name "$APPRUNNER_ROLE" --policy-arn arn:aws:ia
 APPRUNNER_ROLE_ARN="arn:aws:iam::$AWS_ACCOUNT_ID:role/$APPRUNNER_ROLE"
 sleep 10
 
-SOURCE_CONFIG="{\"ImageRepository\":{\"ImageIdentifier\":\"$IMAGE_URI\",\"ImageRepositoryType\":\"ECR\",\"ImageConfiguration\":{\"Port\":\"8080\"}},\"AutoDeploymentsEnabled\":false,\"AuthenticationConfiguration\":{\"AccessRoleArn\":\"$APPRUNNER_ROLE_ARN\"}}"
+RUNTIME_SECRETS=""
+INSTANCE_ROLE_ARN=""
+if [[ -n "${HEDERA_SECRET_ARN:-}" ]]; then
+  INSTANCE_TRUST='{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Service":"tasks.apprunner.amazonaws.com"},"Action":"sts:AssumeRole"}]}'
+  if ! aws iam get-role --role-name "$APPRUNNER_INSTANCE_ROLE" >/dev/null 2>&1; then
+    aws iam create-role --role-name "$APPRUNNER_INSTANCE_ROLE" --assume-role-policy-document "$INSTANCE_TRUST" >/dev/null
+  fi
+  SECRET_POLICY="{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":[\"secretsmanager:GetSecretValue\"],\"Resource\":\"$HEDERA_SECRET_ARN\"}]}"
+  aws iam put-role-policy --role-name "$APPRUNNER_INSTANCE_ROLE" --policy-name rawmarket-hedera-secret --policy-document "$SECRET_POLICY"
+  INSTANCE_ROLE_ARN="arn:aws:iam::$AWS_ACCOUNT_ID:role/$APPRUNNER_INSTANCE_ROLE"
+  RUNTIME_SECRETS=",\"RuntimeEnvironmentSecrets\":{\"HEDERA_OPERATOR_KEY\":\"$HEDERA_SECRET_ARN\"}"
+  sleep 10
+fi
+
+SOURCE_CONFIG="{\"ImageRepository\":{\"ImageIdentifier\":\"$IMAGE_URI\",\"ImageRepositoryType\":\"ECR\",\"ImageConfiguration\":{\"Port\":\"8080\",\"RuntimeEnvironmentVariables\":{\"HEDERA_RPC_URL\":\"https://testnet.hashio.io/api\",\"HEDERA_RECEIPT_CONTRACT\":\"$HEDERA_RECEIPT_CONTRACT\"}$RUNTIME_SECRETS}},\"AutoDeploymentsEnabled\":false,\"AuthenticationConfiguration\":{\"AccessRoleArn\":\"$APPRUNNER_ROLE_ARN\"}}"
+INSTANCE_CONFIG="Cpu=0.25 vCPU,Memory=0.5 GB"
+if [[ -n "$INSTANCE_ROLE_ARN" ]]; then
+  INSTANCE_CONFIG="$INSTANCE_CONFIG,InstanceRoleArn=$INSTANCE_ROLE_ARN"
+fi
 SERVICE_ARN="$(aws apprunner list-services --region "$AWS_REGION" --query "ServiceSummaryList[?ServiceName=='$SERVICE_NAME'].ServiceArn | [0]" --output text)"
 if [[ "$SERVICE_ARN" == "None" ]]; then
-  SERVICE_ARN="$(aws apprunner create-service --region "$AWS_REGION" --service-name "$SERVICE_NAME" --source-configuration "$SOURCE_CONFIG" --health-check-configuration 'Protocol=HTTP,Path=/health,Interval=10,Timeout=5,HealthyThreshold=1,UnhealthyThreshold=5' --instance-configuration 'Cpu=0.25 vCPU,Memory=0.5 GB' --query 'Service.ServiceArn' --output text)"
+  SERVICE_ARN="$(aws apprunner create-service --region "$AWS_REGION" --service-name "$SERVICE_NAME" --source-configuration "$SOURCE_CONFIG" --health-check-configuration 'Protocol=HTTP,Path=/health,Interval=10,Timeout=5,HealthyThreshold=1,UnhealthyThreshold=5' --instance-configuration "$INSTANCE_CONFIG" --query 'Service.ServiceArn' --output text)"
 else
-  aws apprunner update-service --region "$AWS_REGION" --service-arn "$SERVICE_ARN" --source-configuration "$SOURCE_CONFIG" >/dev/null
+  aws apprunner update-service --region "$AWS_REGION" --service-arn "$SERVICE_ARN" --source-configuration "$SOURCE_CONFIG" --instance-configuration "$INSTANCE_CONFIG" >/dev/null
 fi
 
 while true; do

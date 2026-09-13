@@ -1,6 +1,8 @@
 /engine/target
 /web/node_modules
 /web/.next
+/cache
+/out
 .env
 .env.local
 .DS_Store

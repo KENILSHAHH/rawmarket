@@ -41,3 +41,6 @@ footer{height:28px}footer a,footer button{display:flex;align-items:center;gap:3p
 .tradingview-credit{position:absolute;z-index:4;right:12px;bottom:11px;color:var(--muted-2);font:8px var(--mono);text-transform:uppercase;letter-spacing:.04em}
 .tradingview-credit:hover{color:var(--text)}
 .source-pill{z-index:4}
+.toast span a{display:block;margin-top:3px;color:var(--mint);font-weight:700}
+.receipt-link{display:inline-flex;align-items:center;gap:4px;color:var(--mint);font-weight:700}
+.receipt-pending{color:var(--muted-2)}

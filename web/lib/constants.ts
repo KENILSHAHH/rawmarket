@@ -2,6 +2,7 @@ import type {Account,Market} from './types';
 
 export const ENGINE_URL=process.env.NEXT_PUBLIC_ENGINE_URL||'http://localhost:8080';
 export const HASHSCAN_URL='https://hashscan.io/testnet/contract/0x553678C79D4F38d0C7b1297824048887059AD7BA';
+export const hashscanTransactionUrl=(transactionId:string)=>`https://hashscan.io/testnet/transaction/${transactionId}`;
 export const REPOSITORY_URL='https://github.com/KENILSHAHH/rawmarket';
 export const TIME_RANGES=['1D','1W','1M','3M','1Y','5Y','25Y'] as const;
 

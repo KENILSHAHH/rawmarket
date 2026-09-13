@@ -78,7 +78,7 @@ export function useTradingTerminal(){
     try{
       const result=await apiRequest<Order[]>('/api/orders',{method:'POST',body:JSON.stringify({wallet,symbol,claim:'SPOT',side,price:orderType==='limit'?Number(price):undefined,qty:amount,client_id:`web-${crypto.randomUUID()}`,post_only:orderType==='limit'&&postOnly,order_type:orderType})});
       const own=result.find(item=>item.wallet===wallet);const filled=own?.filled||0;
-      setToast({kind:'success',message:filled?`${side==='buy'?'Bought':'Sold'} ${filled} ${symbol} at the resting price`:`Order accepted · ${own?.status||'open'}`});
+      setToast({kind:'success',message:filled?`${side==='buy'?'Bought':'Sold'} ${filled} ${symbol} at the resting price`:`Order accepted · ${own?.status||'open'}`,transactionId:own?.hedera_transaction_id||undefined});
       await Promise.all([refreshMarket(true),refreshAccount()]);
     }catch(error){setToast({kind:'error',message:error instanceof Error?error.message:'Order rejected'})}finally{setSubmitting(false)}
   };

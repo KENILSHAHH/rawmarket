@@ -13,7 +13,9 @@ use std::{
 use tower_http::cors::CorsLayer;
 use uuid::Uuid;
 
+mod hedera;
 mod market_data;
+use hedera::{OrderReceipt, ReceiptWriter};
 use market_data::{CandleResponse, HistoryStore};
 
 #[derive(Clone, Serialize)]
@@ -165,6 +167,9 @@ struct Tracked {
     status: String,
     order_type: String,
     created_at: u64,
+    hedera_tx_hash: Option<String>,
+    hedera_transaction_id: Option<String>,
+    hedera_status: String,
 }
 
 struct App {
@@ -174,6 +179,7 @@ struct App {
     tracked: HashMap<Uuid, Tracked>,
     fills: Vec<Trade>,
     history: HistoryStore,
+    receipt_writer: Option<ReceiptWriter>,
 }
 
 type Shared = Arc<Mutex<App>>;
@@ -232,6 +238,9 @@ struct OrderView {
     remaining: u64,
     status: String,
     created_at: u64,
+    hedera_tx_hash: Option<String>,
+    hedera_transaction_id: Option<String>,
+    hedera_status: String,
 }
 
 #[derive(Deserialize)]
@@ -341,6 +350,9 @@ fn ensure_book(app: &mut App, book_key: &str) {
                     status: "open".into(),
                     order_type: "limit".into(),
                     created_at: now(),
+                    hedera_tx_hash: None,
+                    hedera_transaction_id: None,
+                    hedera_status: "not_applicable".into(),
                 },
             );
         }
@@ -395,6 +407,9 @@ fn order_view(id: Uuid, order: &Tracked) -> OrderView {
         remaining: order.remaining,
         status: order.status.clone(),
         created_at: order.created_at,
+        hedera_tx_hash: order.hedera_tx_hash.clone(),
+        hedera_transaction_id: order.hedera_transaction_id.clone(),
+        hedera_status: order.hedera_status.clone(),
     }
 }
 
@@ -459,192 +474,262 @@ async fn place(
     if request.qty == 0 {
         return Err(error("quantity must be positive"));
     }
-    let mut app = state.lock().unwrap();
-    if !app
-        .markets
-        .iter()
-        .any(|item| item.symbol.eq_ignore_ascii_case(&request.symbol))
-    {
-        return Err(error("unknown market"));
-    }
-    let book_key = key(&request.symbol, &request.claim);
-    ensure_book(&mut app, &book_key);
-    let side = match request.side.to_lowercase().as_str() {
-        "buy" => Side::Long,
-        "sell" => Side::Short,
-        _ => return Err(error("side must be buy or sell")),
-    };
-    let order_type = request
-        .order_type
-        .as_deref()
-        .unwrap_or("limit")
-        .to_lowercase();
-    let immediate_or_cancel = order_type == "market";
-    let price_ticks = if immediate_or_cancel {
-        let book = app.books.get(&book_key).unwrap();
-        match side {
-            Side::Long => book.best_ask(),
-            Side::Short => book.best_bid(),
+    let (
+        ids,
+        receipt_writer,
+        receipt_order_id,
+        receipt_symbol,
+        receipt_wallet,
+        side,
+        price_ticks,
+        engine_sequence,
+        id,
+    ) = {
+        let mut app = state.lock().unwrap();
+        if !app
+            .markets
+            .iter()
+            .any(|item| item.symbol.eq_ignore_ascii_case(&request.symbol))
+        {
+            return Err(error("unknown market"));
         }
-        .ok_or_else(|| error("no executable liquidity"))?
+        let book_key = key(&request.symbol, &request.claim);
+        ensure_book(&mut app, &book_key);
+        let side = match request.side.to_lowercase().as_str() {
+            "buy" => Side::Long,
+            "sell" => Side::Short,
+            _ => return Err(error("side must be buy or sell")),
+        };
+        let order_type = request
+            .order_type
+            .as_deref()
+            .unwrap_or("limit")
+            .to_lowercase();
+        let immediate_or_cancel = order_type == "market";
+        let price_ticks = if immediate_or_cancel {
+            let book = app.books.get(&book_key).unwrap();
+            match side {
+                Side::Long => book.best_ask(),
+                Side::Short => book.best_bid(),
+            }
+            .ok_or_else(|| error("no executable liquidity"))?
+        } else {
+            let price = request
+                .price
+                .ok_or_else(|| error("price is required for a limit order"))?;
+            if !price.is_finite() || price <= 0.0 {
+                return Err(error("price must be positive"));
+            }
+            (price * 100.0).round() as u64
+        };
+        let price = price_ticks as f64 / 100.0;
+        let maximum_cost = price * request.qty as f64;
+        {
+            let account = account_mut(&mut app, &request.wallet);
+            if side == Side::Long && account.cash - account.reserved_cash < maximum_cost {
+                return Err(error("insufficient available demo USD"));
+            }
+            if side == Side::Short {
+                let position = account.positions.entry(book_key.clone()).or_default();
+                if position.available < position.reserved + request.qty {
+                    return Err(error(
+                        "sell requires available inventory; naked shorting is disabled",
+                    ));
+                }
+            }
+        }
+
+        let id = Uuid::new_v4();
+        let order = Order {
+            id,
+            client_id: request.client_id,
+            owner: request.wallet.clone(),
+            side,
+            price_ticks,
+            qty: request.qty,
+            remaining: request.qty,
+            post_only: request.post_only.unwrap_or(false),
+            immediate_or_cancel,
+            seq: 0,
+        };
+        let (_, fills) = app
+            .books
+            .get_mut(&book_key)
+            .unwrap()
+            .place(order)
+            .map_err(|reason| error(format!("order rejected: {reason:?}")))?;
+        let engine_sequence = app.books.get(&book_key).unwrap().sequence();
+
+        {
+            let account = account_mut(&mut app, &request.wallet);
+            if side == Side::Long {
+                account.reserved_cash += maximum_cost;
+            } else {
+                account
+                    .positions
+                    .entry(book_key.clone())
+                    .or_default()
+                    .reserved += request.qty;
+            }
+        }
+
+        let mut taker = Tracked {
+            wallet: request.wallet.clone(),
+            key: book_key.clone(),
+            side,
+            price,
+            qty: request.qty,
+            remaining: request.qty,
+            filled: 0,
+            status: "open".into(),
+            order_type: order_type.clone(),
+            created_at: now(),
+            hedera_tx_hash: None,
+            hedera_transaction_id: None,
+            hedera_status: if app.receipt_writer.is_some() {
+                "pending".into()
+            } else {
+                "unavailable".into()
+            },
+        };
+        let mut ids = vec![id];
+        for fill in fills {
+            ids.push(fill.maker);
+            let maker = app
+                .tracked
+                .get(&fill.maker)
+                .cloned()
+                .ok_or_else(|| error("maker state missing"))?;
+            let (buyer, seller) = if side == Side::Long {
+                (taker.clone(), maker.clone())
+            } else {
+                (maker.clone(), taker.clone())
+            };
+            let value = fill.price_ticks as f64 / 100.0 * fill.qty as f64;
+            let held = buyer.price * fill.qty as f64;
+            let buyer_account = account_mut(&mut app, &buyer.wallet);
+            buyer_account.cash = (buyer_account.cash - value).max(0.0);
+            buyer_account.reserved_cash = (buyer_account.reserved_cash - held).max(0.0);
+            buyer_account
+                .positions
+                .entry(book_key.clone())
+                .or_default()
+                .available += fill.qty;
+            let seller_account = account_mut(&mut app, &seller.wallet);
+            seller_account.cash += value;
+            let seller_position = seller_account
+                .positions
+                .entry(book_key.clone())
+                .or_default();
+            seller_position.reserved = seller_position.reserved.saturating_sub(fill.qty);
+            seller_position.available = seller_position.available.saturating_sub(fill.qty);
+            app.fills.push(Trade {
+                id: Uuid::new_v4(),
+                symbol: request.symbol.to_uppercase(),
+                claim: request.claim.to_uppercase(),
+                price: fill.price_ticks as f64 / 100.0,
+                qty: fill.qty,
+                buyer: buyer.wallet,
+                seller: seller.wallet,
+                timestamp: now(),
+            });
+            taker.remaining = taker.remaining.saturating_sub(fill.qty);
+            taker.filled += fill.qty;
+            if let Some(maker_order) = app.tracked.get_mut(&fill.maker) {
+                maker_order.remaining = maker_order.remaining.saturating_sub(fill.qty);
+                maker_order.filled += fill.qty;
+                maker_order.status = if maker_order.remaining == 0 {
+                    "filled".into()
+                } else {
+                    "partially_filled".into()
+                };
+            }
+        }
+
+        if immediate_or_cancel && taker.remaining > 0 {
+            let unfilled = taker.remaining;
+            let account = account_mut(&mut app, &request.wallet);
+            if side == Side::Long {
+                account.reserved_cash = (account.reserved_cash - price * unfilled as f64).max(0.0);
+            } else {
+                account
+                    .positions
+                    .entry(book_key.clone())
+                    .or_default()
+                    .reserved = account
+                    .positions
+                    .get(&book_key)
+                    .map(|position| position.reserved)
+                    .unwrap_or(0)
+                    .saturating_sub(unfilled);
+            }
+            taker.remaining = 0;
+            taker.status = if taker.filled > 0 {
+                "partially_filled".into()
+            } else {
+                "expired".into()
+            };
+        } else {
+            taker.status = if taker.remaining == 0 {
+                "filled".into()
+            } else if taker.filled > 0 {
+                "partially_filled".into()
+            } else {
+                "open".into()
+            };
+        }
+        app.tracked.insert(id, taker);
+        let receipt_writer = app.receipt_writer.clone();
+        let receipt_order_id = id.to_string();
+        let receipt_symbol = request.symbol.to_uppercase();
+        let receipt_wallet = request.wallet.clone();
+        (
+            ids,
+            receipt_writer,
+            receipt_order_id,
+            receipt_symbol,
+            receipt_wallet,
+            side,
+            price_ticks,
+            engine_sequence,
+            id,
+        )
+    };
+
+    let receipt_result = if let Some(writer) = receipt_writer {
+        Some(
+            writer
+                .record_order(OrderReceipt {
+                    order_id: &receipt_order_id,
+                    symbol: &receipt_symbol,
+                    wallet: &receipt_wallet,
+                    is_buy: side == Side::Long,
+                    price_ticks,
+                    quantity: request.qty,
+                    engine_sequence,
+                })
+                .await,
+        )
     } else {
-        let price = request
-            .price
-            .ok_or_else(|| error("price is required for a limit order"))?;
-        if !price.is_finite() || price <= 0.0 {
-            return Err(error("price must be positive"));
-        }
-        (price * 100.0).round() as u64
+        None
     };
-    let price = price_ticks as f64 / 100.0;
-    let maximum_cost = price * request.qty as f64;
-    {
-        let account = account_mut(&mut app, &request.wallet);
-        if side == Side::Long && account.cash - account.reserved_cash < maximum_cost {
-            return Err(error("insufficient available demo USD"));
-        }
-        if side == Side::Short {
-            let position = account.positions.entry(book_key.clone()).or_default();
-            if position.available < position.reserved + request.qty {
-                return Err(error(
-                    "sell requires available inventory; naked shorting is disabled",
-                ));
+
+    let mut app = state.lock().unwrap();
+    if let Some(result) = receipt_result {
+        if let Some(order) = app.tracked.get_mut(&id) {
+            match result {
+                Ok(receipt) => {
+                    order.hedera_tx_hash = Some(receipt.transaction_hash);
+                    order.hedera_transaction_id = receipt.transaction_id;
+                    order.hedera_status = "confirmed".into();
+                }
+                Err(reason) => {
+                    eprintln!("order {id} Hedera receipt failed: {reason}");
+                    order.hedera_status = "failed".into();
+                }
             }
         }
     }
-
-    let id = Uuid::new_v4();
-    let order = Order {
-        id,
-        client_id: request.client_id,
-        owner: request.wallet.clone(),
-        side,
-        price_ticks,
-        qty: request.qty,
-        remaining: request.qty,
-        post_only: request.post_only.unwrap_or(false),
-        immediate_or_cancel,
-        seq: 0,
-    };
-    let (_, fills) = app
-        .books
-        .get_mut(&book_key)
-        .unwrap()
-        .place(order)
-        .map_err(|reason| error(format!("order rejected: {reason:?}")))?;
-
-    {
-        let account = account_mut(&mut app, &request.wallet);
-        if side == Side::Long {
-            account.reserved_cash += maximum_cost;
-        } else {
-            account
-                .positions
-                .entry(book_key.clone())
-                .or_default()
-                .reserved += request.qty;
-        }
-    }
-
-    let mut taker = Tracked {
-        wallet: request.wallet.clone(),
-        key: book_key.clone(),
-        side,
-        price,
-        qty: request.qty,
-        remaining: request.qty,
-        filled: 0,
-        status: "open".into(),
-        order_type: order_type.clone(),
-        created_at: now(),
-    };
-    let mut ids = vec![id];
-    for fill in fills {
-        ids.push(fill.maker);
-        let maker = app
-            .tracked
-            .get(&fill.maker)
-            .cloned()
-            .ok_or_else(|| error("maker state missing"))?;
-        let (buyer, seller) = if side == Side::Long {
-            (taker.clone(), maker.clone())
-        } else {
-            (maker.clone(), taker.clone())
-        };
-        let value = fill.price_ticks as f64 / 100.0 * fill.qty as f64;
-        let held = buyer.price * fill.qty as f64;
-        let buyer_account = account_mut(&mut app, &buyer.wallet);
-        buyer_account.cash = (buyer_account.cash - value).max(0.0);
-        buyer_account.reserved_cash = (buyer_account.reserved_cash - held).max(0.0);
-        buyer_account
-            .positions
-            .entry(book_key.clone())
-            .or_default()
-            .available += fill.qty;
-        let seller_account = account_mut(&mut app, &seller.wallet);
-        seller_account.cash += value;
-        let seller_position = seller_account
-            .positions
-            .entry(book_key.clone())
-            .or_default();
-        seller_position.reserved = seller_position.reserved.saturating_sub(fill.qty);
-        seller_position.available = seller_position.available.saturating_sub(fill.qty);
-        app.fills.push(Trade {
-            id: Uuid::new_v4(),
-            symbol: request.symbol.to_uppercase(),
-            claim: request.claim.to_uppercase(),
-            price: fill.price_ticks as f64 / 100.0,
-            qty: fill.qty,
-            buyer: buyer.wallet,
-            seller: seller.wallet,
-            timestamp: now(),
-        });
-        taker.remaining = taker.remaining.saturating_sub(fill.qty);
-        taker.filled += fill.qty;
-        if let Some(maker_order) = app.tracked.get_mut(&fill.maker) {
-            maker_order.remaining = maker_order.remaining.saturating_sub(fill.qty);
-            maker_order.filled += fill.qty;
-            maker_order.status = if maker_order.remaining == 0 {
-                "filled".into()
-            } else {
-                "partially_filled".into()
-            };
-        }
-    }
-
-    if immediate_or_cancel && taker.remaining > 0 {
-        let unfilled = taker.remaining;
-        let account = account_mut(&mut app, &request.wallet);
-        if side == Side::Long {
-            account.reserved_cash = (account.reserved_cash - price * unfilled as f64).max(0.0);
-        } else {
-            account
-                .positions
-                .entry(book_key.clone())
-                .or_default()
-                .reserved = account
-                .positions
-                .get(&book_key)
-                .map(|position| position.reserved)
-                .unwrap_or(0)
-                .saturating_sub(unfilled);
-        }
-        taker.remaining = 0;
-        taker.status = if taker.filled > 0 {
-            "partially_filled".into()
-        } else {
-            "expired".into()
-        };
-    } else {
-        taker.status = if taker.remaining == 0 {
-            "filled".into()
-        } else if taker.filled > 0 {
-            "partially_filled".into()
-        } else {
-            "open".into()
-        };
-    }
-    app.tracked.insert(id, taker);
     let result = ids
         .into_iter()
         .filter_map(|order_id| {
@@ -762,6 +847,7 @@ async fn main() {
         tracked: HashMap::new(),
         fills: vec![],
         history: HistoryStore::embedded().expect("embedded market history must be valid"),
+        receipt_writer: ReceiptWriter::from_env(),
     }));
     let app = Router::new()
         .route("/api/markets", get(list_markets))
