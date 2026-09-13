@@ -23,7 +23,7 @@ Each series has a cap C and multiplier m. A long and complementary short are ful
 
 ## Hedera / ATS
 
-`contracts/RawMarketSettlement.sol` is the RawMarket settlement and oracle-verifier extension point. ATS is pinned to commit `be4f860e408ec5b1a24d12feb6f872aabff69319` in `sources/manifest.json`; deployment addresses are intentionally unset until a testnet deployment is performed. The app therefore labels ATS integration as “pending deployment” rather than inventing addresses.
+`contracts/RawMarketSettlement.sol` is deployed on Hedera testnet at `0x553678C79D4F38d0C7b1297824048887059AD7BA`; the deployment transaction and eight on-chain series are recorded in [`deployments/hedera-testnet.json`](/Users/kenilshah/Desktop/code/rawmarket/deployments/hedera-testnet.json). ATS is pinned to commit `be4f860e408ec5b1a24d12feb6f872aabff69319` in `sources/manifest.json`, but ATS factory/resolver deployment and HTS token issuance are still pending and are not claimed as complete.
 
 ## Verification
 

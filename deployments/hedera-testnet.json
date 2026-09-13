@@ -1,0 +1,37 @@
+{
+  "network": "hedera-testnet",
+  "operator_account": "0.0.10522153",
+  "operator_evm_address": "0xf3591089bfd94760f6da5c9be2833abb0479bb39",
+  "settlement_contract": "0x553678C79D4F38d0C7b1297824048887059AD7BA",
+  "settlement_deployment_transaction": "0xdd3859b55287b28c7e297af0ea37a22ad6f75827236162c060af73db279d4544",
+  "hashscan_contract": "https://hashscan.io/testnet/contract/0x553678C79D4F38d0C7b1297824048887059AD7BA",
+  "series": {
+    "MILK": {"id": "0x4d494c4b00000000000000000000000000000000000000000000000000000000", "multiplier": 2000, "cap": 25},
+    "POTATO": {"id": "0x504f5441544f0000000000000000000000000000000000000000000000000000", "multiplier": 1, "cap": 35},
+    "TOMATO": {"id": "0x544f4d41544f0000000000000000000000000000000000000000000000000000", "multiplier": 1, "cap": 40},
+    "WHEAT": {"id": "0x5748454154000000000000000000000000000000000000000000000000000000", "multiplier": 1, "cap": 15},
+    "CORN": {"id": "0x434f524e00000000000000000000000000000000000000000000000000000000", "multiplier": 1, "cap": 10},
+    "RICE": {"id": "0x5249434500000000000000000000000000000000000000000000000000000000", "multiplier": 1, "cap": 30},
+    "SOYBEAN": {"id": "0x534f594245414e00000000000000000000000000000000000000000000000000", "multiplier": 1, "cap": 25},
+    "DRY_BEAN": {"id": "0x4452595f4245414e000000000000000000000000000000000000000000000000", "multiplier": 1, "cap": 80}
+  },
+  "ats_status": "partial deployment; infrastructure and 28 facets confirmed, deployment paused for more testnet HBAR",
+  "ats_checkpoint": "hedera-testnet-2026-09-13T11-39-30-743",
+  "ats_partial_infrastructure": {
+    "proxy_admin": "0x63c67F5b2Ba9B68E699a236EA70Bed36239C805D",
+    "business_logic_resolver_proxy": "0xf0433BeF9a0838323D57b4a6cbE6976CE66A0A26",
+    "business_logic_resolver_implementation": "0x1A43Fb1191C689785646F9f160d73bAD091b2CE0"
+  },
+  "hts_status": "plain HTS test tokens created as an interim testnet rail; these are not ATS security assets",
+  "hts_tokens": {
+    "RMUSD": {"token_id": "0.0.10522368", "transaction_id": "0.0.10522153@1789299178.382728532"},
+    "RMMILK": {"token_id": "0.0.10522374", "transaction_id": "0.0.10522153@1789299200.799060583"},
+    "RMPOTATO": {"token_id": "0.0.10522375", "transaction_id": "0.0.10522153@1789299201.946509734"},
+    "RMTOMATO": {"token_id": "0.0.10522376", "transaction_id": "0.0.10522153@1789299204.103379882"},
+    "RMWHEAT": {"token_id": "0.0.10522378", "transaction_id": "0.0.10522153@1789299204.347432241"},
+    "RMCORN": {"token_id": "0.0.10522379", "transaction_id": "0.0.10522153@1789299207.299628387"},
+    "RMRICE": {"token_id": "0.0.10522380", "transaction_id": "0.0.10522153@1789299207.849728727"},
+    "RMSOYBEAN": {"token_id": "0.0.10522381", "transaction_id": "0.0.10522153@1789299211.288857657"},
+    "RMDRYBEAN": {"token_id": "0.0.10522382", "transaction_id": "0.0.10522153@1789299214.973397078"}
+  }
+}
