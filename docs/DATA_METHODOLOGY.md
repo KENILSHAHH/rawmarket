@@ -7,6 +7,7 @@ RawMarket distinguishes official publications from RawMarket-calculated indices 
 The exact evidence captured for the hackathon is indexed in [`sources/manifest.json`](../sources/manifest.json). Archived files include:
 
 - USDA Class and Component Prices, report dated 2026-09-02;
+- Federal Order Class III historical price table, 1990 through August 2026;
 - USDA National Potato and Onion Report, dated 2026-09-11;
 - USDA Tomato Fax Report, dated 2026-09-11;
 - USDA National FOB Review, dated 2026-09-11;
@@ -23,9 +24,9 @@ The manifest records source URLs and SHA-256 hashes. CME Class III Milk specific
 | Quote | USD per hundredweight |
 | Reference exposure | 2,000 cwt / 200,000 pounds |
 | Official source | USDA Class and Component Prices |
-| Current demo coverage | One archived fixing dated 2026-09-02 |
+| Historical coverage | 440 monthly observations, January 1990 through August 2026 |
 
-Class I, Class II, Class IV, retail milk and a previous month’s price are never substitutes for the named month. Continuous trading does not imply a continuous official benchmark series. The UI therefore shows one source-labelled candle rather than manufacturing intramonth OHLC data.
+Class I, Class II, Class IV, retail milk and a previous month’s price are never substitutes for the named month. Continuous trading does not imply a continuous official benchmark series. The chart therefore renders fixing-change candles: the open is the previous published monthly Class III fixing, the close is the current fixing, and high/low are the two endpoints. Volume remains zero because the official fixing table contains no traded volume. This transformation is deterministic and does not manufacture intramonth prices.
 
 ## RawMarket US Russet Potato Index v1
 

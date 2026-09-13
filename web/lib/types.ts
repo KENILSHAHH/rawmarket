@@ -1,0 +1,13 @@
+export type Market={symbol:string;name:string;unit:string;m:number;cap:number;status:string;expiry:string;description:string;reference:number};
+export type Level={price:number;size:number;total:number};
+export type Book={symbol:string;claim:string;bids:Level[];asks:Level[];last:number;sequence:number};
+export type Position={available:number;reserved:number};
+export type Account={wallet:string;cash:number;reserved_cash:number;available_cash:number;positions:Record<string,Position>;open_orders:number;funded:boolean};
+export type Candle={time:string;open:number;high:number;low:number;close:number;volume:number;source:string};
+export type CandleResponse={interval:string;frequency:string;source_status:string;coverage:string;source_url?:string;as_of?:string;candles:Candle[]};
+export type Order={id:string;symbol:string;claim:string;wallet:string;side:'buy'|'sell';order_type:string;price:number;qty:number;filled:number;remaining:number;status:string;created_at:number};
+export type Trade={id:string;symbol:string;claim:string;price:number;qty:number;buyer:string;seller:string;timestamp:number};
+export type Side='buy'|'sell';
+export type OrderType='limit'|'market';
+export type DockTab='orders'|'fills'|'balances';
+export type Toast={kind:'success'|'error'|'info';message:string};

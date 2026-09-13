@@ -13,6 +13,9 @@ use std::{
 use tower_http::cors::CorsLayer;
 use uuid::Uuid;
 
+mod market_data;
+use market_data::{CandleResponse, HistoryStore};
+
 #[derive(Clone, Serialize)]
 struct Market {
     symbol: String,
@@ -170,6 +173,7 @@ struct App {
     accounts: HashMap<String, Account>,
     tracked: HashMap<Uuid, Tracked>,
     fills: Vec<Trade>,
+    history: HistoryStore,
 }
 
 type Shared = Arc<Mutex<App>>;
@@ -200,25 +204,6 @@ struct BookView {
     asks: Vec<Level>,
     last: f64,
     sequence: u64,
-}
-
-#[derive(Serialize)]
-struct Candle {
-    time: String,
-    open: f64,
-    high: f64,
-    low: f64,
-    close: f64,
-    volume: f64,
-    source: String,
-}
-
-#[derive(Serialize)]
-struct CandleResponse {
-    interval: String,
-    source_status: String,
-    coverage: String,
-    candles: Vec<Candle>,
 }
 
 #[derive(Clone, Serialize)]
@@ -761,37 +746,7 @@ async fn candles(
     State(state): State<Shared>,
 ) -> Json<CandleResponse> {
     let app = state.lock().unwrap();
-    let market = app
-        .markets
-        .iter()
-        .find(|item| item.symbol.eq_ignore_ascii_case(&symbol));
-    let (source_status, coverage, candles) = match market {
-        Some(item) if item.symbol == "MILK" => (
-            "verified USDA fixing".into(),
-            "One official observation captured; no continuous history".into(),
-            vec![Candle {
-                time: "2026-09-02".into(),
-                open: item.reference,
-                high: item.reference,
-                low: item.reference,
-                close: item.reference,
-                volume: 0.0,
-                source: "USDA Class III announcement".into(),
-            }],
-        ),
-        Some(_) => (
-            "historical/demo; not chartable as live market data".into(),
-            "No verified compatible fixing series loaded".into(),
-            vec![],
-        ),
-        None => ("unknown market".into(), "No data".into(), vec![]),
-    };
-    Json(CandleResponse {
-        interval,
-        source_status,
-        coverage,
-        candles,
-    })
+    Json(app.history.candles(&symbol, &interval))
 }
 
 async fn health() -> Json<serde_json::Value> {
@@ -806,6 +761,7 @@ async fn main() {
         accounts: HashMap::new(),
         tracked: HashMap::new(),
         fills: vec![],
+        history: HistoryStore::embedded().expect("embedded market history must be valid"),
     }));
     let app = Router::new()
         .route("/api/markets", get(list_markets))

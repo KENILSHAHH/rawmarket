@@ -250,8 +250,11 @@ components:
       required: [interval, source_status, coverage, candles]
       properties:
         interval: {type: string}
+        frequency: {type: string}
         source_status: {type: string}
         coverage: {type: string}
+        source_url: {type: string, nullable: true}
+        as_of: {type: string, nullable: true}
         candles: {type: array, items: {$ref: '#/components/schemas/Candle'}}
     Position:
       type: object

@@ -14,7 +14,7 @@
     "project": "rawmarket-engine-build",
     "containerRegistry": "Amazon ECR",
     "repository": "rawmarket-engine",
-    "imageTag": "v0.2.0"
+    "imageTag": "history-v1"
   },
   "frontend": {
     "provider": "Vercel",

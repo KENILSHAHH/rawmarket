@@ -90,8 +90,11 @@ Supported UI intervals are `1D`, `1W`, `1M`, `1Y`, `5Y`, and `25Y`. The response
 ```json
 {
   "interval":"1D",
-  "source_status":"verified USDA fixing",
-  "coverage":"1 official observation captured; no continuous history",
+  "frequency":"monthly",
+  "source_status":"verified official history",
+  "coverage":"2001-08-01 through 2026-08-01 · 301 observations",
+  "source_url":"https://www.fmma30.com/ClassPrice/HistoryofClassIII--1990-Current.pdf",
+  "as_of":"2026-08-01",
   "candles":[{
     "time":"2026-09-02",
     "open":16.64,
@@ -104,7 +107,7 @@ Supported UI intervals are `1D`, `1W`, `1M`, `1Y`, `5Y`, and `25Y`. The response
 }
 ```
 
-An empty `candles` array is a valid and meaningful result. Clients must not interpolate or backfill it with traded prices.
+MILK bars are fixing-change candles: `open` is the previous official monthly fixing, `close` is the current fixing, and `high`/`low` are the two endpoints. They are not intramonth trade OHLC. An empty `candles` array is a valid and meaningful result. Clients must not interpolate or backfill it with traded prices.
 
 ### `GET /api/account/{wallet}`
 

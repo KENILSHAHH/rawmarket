@@ -29,7 +29,7 @@ fi
 
 SOURCE_ZIP="$(mktemp -t rawmarket-engine-source).zip"
 trap 'rm -f "$SOURCE_ZIP"' EXIT
-(cd "$ENGINE_DIR" && zip -q -r "$SOURCE_ZIP" Cargo.toml Cargo.lock src Dockerfile .dockerignore buildspec.yml)
+(cd "$ENGINE_DIR" && zip -q -r "$SOURCE_ZIP" Cargo.toml Cargo.lock src data Dockerfile .dockerignore buildspec.yml)
 aws s3 cp "$SOURCE_ZIP" "s3://$BUILD_BUCKET/$SOURCE_KEY" --region "$AWS_REGION" >/dev/null
 
 CODEBUILD_TRUST='{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Service":"codebuild.amazonaws.com"},"Action":"sts:AssumeRole"}]}'
