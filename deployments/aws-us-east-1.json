@@ -1,0 +1,24 @@
+{
+  "deployedAt": "2026-09-13",
+  "region": "us-east-1",
+  "service": {
+    "provider": "AWS App Runner",
+    "name": "rawmarket-engine",
+    "arn": "arn:aws:apprunner:us-east-1:805770710715:service/rawmarket-engine/afd42d14c2a548dbb3d03d6d0a940571",
+    "url": "https://qr87wwmycq.us-east-1.awsapprunner.com",
+    "healthPath": "/health",
+    "status": "RUNNING"
+  },
+  "build": {
+    "provider": "AWS CodeBuild",
+    "project": "rawmarket-engine-build",
+    "containerRegistry": "Amazon ECR",
+    "repository": "rawmarket-engine",
+    "imageTag": "latest"
+  },
+  "frontend": {
+    "provider": "Vercel",
+    "url": "https://rawmarket-terminal.vercel.app",
+    "engineEnvironmentVariable": "NEXT_PUBLIC_ENGINE_URL"
+  }
+}

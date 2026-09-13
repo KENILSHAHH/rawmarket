@@ -10,6 +10,16 @@ The product is designed in the style of a modern professional trading terminal: 
 >
 > The Rust CLOB and UI are functional. A RawMarket settlement contract, eight series, and interim HTS test tokens are deployed on Hedera testnet. The pinned ATS deployment is partially complete: the BLR infrastructure and 28 of 108 facets have deployed, but the ATS factory/configuration and ATS-issued market assets are not yet complete because the operator account needs more testnet HBAR. The repository records this honestly and does not present plain HTS tokens as ATS security tokens.
 
+## Live deployment
+
+- Trading terminal: [rawmarket-terminal.vercel.app](https://rawmarket-terminal.vercel.app)
+- Rust matching engine: [qr87wwmycq.us-east-1.awsapprunner.com](https://qr87wwmycq.us-east-1.awsapprunner.com)
+- Engine health: [qr87wwmycq.us-east-1.awsapprunner.com/health](https://qr87wwmycq.us-east-1.awsapprunner.com/health)
+
+The engine runs as a non-root Linux container on AWS App Runner. AWS CodeBuild performs the reproducible x86-64 image build, stores the image in private ECR, and App Runner supplies the public TLS endpoint and health checks. The Vercel production build is configured with this endpoint through `NEXT_PUBLIC_ENGINE_URL`.
+
+This is a public hackathon demo service. Its balances and order state are currently in memory and reset when App Runner replaces the container. Authentication, durable command persistence, multi-instance coordination, rate limiting, and Hedera-backed settlement remain required before production use.
+
 ## What the product does
 
 RawMarket presents one US-facing market family for each product, with no state-specific or city-specific trading screens. The initial catalog is:
