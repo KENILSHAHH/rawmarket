@@ -1,0 +1,267 @@
+openapi: 3.1.0
+info:
+  title: RawMarket Trading API
+  version: 0.1.0-demo
+  description: |
+    Spot commodity trading API for RawMarket. The current implementation is a
+    local/testnet demo. It must not be used with production capital: wallet is
+    not authentication and account state is process-local.
+servers:
+  - url: http://localhost:8080
+    description: Local Rust engine
+tags:
+  - name: System
+  - name: Markets
+  - name: Account
+  - name: Trading
+paths:
+  /health:
+    get:
+      tags: [System]
+      operationId: health
+      responses:
+        '200':
+          description: Engine is running
+          content:
+            text/plain:
+              schema: {type: string, example: ok}
+  /api/markets:
+    get:
+      tags: [Markets]
+      operationId: listMarkets
+      responses:
+        '200':
+          description: Market catalog
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/Market'}
+  /api/book/{symbol}/SPOT:
+    get:
+      tags: [Markets]
+      operationId: getSpotBook
+      parameters:
+        - {$ref: '#/components/parameters/Symbol'}
+      responses:
+        '200':
+          description: Sequence-numbered spot book
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Book'}
+  /api/trades/{symbol}/SPOT:
+    get:
+      tags: [Markets]
+      operationId: getSpotTrades
+      parameters:
+        - {$ref: '#/components/parameters/Symbol'}
+      responses:
+        '200':
+          description: Recent demo fills
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/Trade'}
+  /api/candles/{symbol}/{interval}:
+    get:
+      tags: [Markets]
+      operationId: getCandles
+      parameters:
+        - {$ref: '#/components/parameters/Symbol'}
+        - name: interval
+          in: path
+          required: true
+          schema: {type: string, enum: [1D, 1W, 1M, 1Y, 5Y, 25Y]}
+      responses:
+        '200':
+          description: Source-backed candles or an explicit empty result
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CandleResponse'}
+  /api/account/{wallet}:
+    get:
+      tags: [Account]
+      operationId: getDemoAccount
+      parameters:
+        - {$ref: '#/components/parameters/Wallet'}
+      responses:
+        '200':
+          description: Local demo account
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Account'}
+  /api/fund:
+    post:
+      tags: [Account]
+      operationId: fundDemoAccount
+      description: Demo-only local balance faucet. Disable outside sandbox.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [wallet]
+              properties:
+                wallet: {type: string, example: bot-001}
+                amount: {type: number, format: double, default: 10000}
+      responses:
+        '200':
+          description: Updated demo account
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Account'}
+  /api/orders:
+    post:
+      tags: [Trading]
+      operationId: placeSpotOrder
+      description: Places a spot limit order and attempts immediate matching.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/PlaceOrderRequest'}
+      responses:
+        '200':
+          description: Order state and any maker/taker results
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/Order'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+  /api/orders/{id}:
+    delete:
+      tags: [Trading]
+      operationId: cancelOrder
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Cancelled order
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Order'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+components:
+  parameters:
+    Symbol:
+      name: symbol
+      in: path
+      required: true
+      schema: {type: string, example: MILK}
+    Wallet:
+      name: wallet
+      in: path
+      required: true
+      schema: {type: string, example: bot-001}
+  responses:
+    BadRequest:
+      description: Command rejected
+      content:
+        text/plain:
+          schema: {type: string}
+  schemas:
+    Market:
+      type: object
+      required: [symbol, name, unit, m, cap, status, expiry, description, reference]
+      properties:
+        symbol: {type: string, example: MILK}
+        name: {type: string}
+        unit: {type: string, example: USD/cwt}
+        m: {type: integer, format: uint64}
+        cap: {type: integer, format: uint64}
+        status: {type: string}
+        expiry: {type: string, format: date-time}
+        description: {type: string}
+        reference: {type: number, format: double}
+    Level:
+      type: object
+      required: [price, size, total]
+      properties:
+        price: {type: number, format: double}
+        size: {type: integer, format: uint64}
+        total: {type: number, format: double}
+    Book:
+      type: object
+      required: [symbol, claim, bids, asks, last, sequence]
+      properties:
+        symbol: {type: string}
+        claim: {type: string, enum: [SPOT]}
+        bids: {type: array, items: {$ref: '#/components/schemas/Level'}}
+        asks: {type: array, items: {$ref: '#/components/schemas/Level'}}
+        last: {type: number, format: double}
+        sequence: {type: integer, format: uint64}
+    Candle:
+      type: object
+      required: [time, open, high, low, close, volume, source]
+      properties:
+        time: {type: string}
+        open: {type: number, format: double}
+        high: {type: number, format: double}
+        low: {type: number, format: double}
+        close: {type: number, format: double}
+        volume: {type: number, format: double}
+        source: {type: string}
+    CandleResponse:
+      type: object
+      required: [interval, source_status, coverage, candles]
+      properties:
+        interval: {type: string}
+        source_status: {type: string}
+        coverage: {type: string}
+        candles: {type: array, items: {$ref: '#/components/schemas/Candle'}}
+    Position:
+      type: object
+      properties:
+        available: {type: integer, format: uint64}
+        reserved: {type: integer, format: uint64}
+    Account:
+      type: object
+      required: [wallet, cash, reserved_cash, available_cash, positions, open_orders]
+      properties:
+        wallet: {type: string}
+        cash: {type: number, format: double}
+        reserved_cash: {type: number, format: double}
+        available_cash: {type: number, format: double}
+        positions:
+          type: object
+          additionalProperties: {$ref: '#/components/schemas/Position'}
+        open_orders: {type: integer}
+    PlaceOrderRequest:
+      type: object
+      required: [wallet, symbol, claim, side, price, qty, client_id]
+      properties:
+        wallet: {type: string, example: bot-001}
+        symbol: {type: string, example: MILK}
+        claim: {type: string, enum: [SPOT]}
+        side: {type: string, enum: [buy, sell]}
+        price: {type: number, format: double, example: 16.61}
+        qty: {type: integer, format: uint64, minimum: 1}
+        client_id: {type: string, minLength: 1, maxLength: 128}
+        post_only: {type: boolean, default: false}
+    Order:
+      type: object
+      required: [id, symbol, claim, wallet, side, price, remaining, status]
+      properties:
+        id: {type: string, format: uuid}
+        symbol: {type: string}
+        claim: {type: string, enum: [SPOT]}
+        wallet: {type: string}
+        side: {type: string, enum: [buy, sell]}
+        price: {type: number, format: double}
+        remaining: {type: integer, format: uint64}
+        status: {type: string}
+    Trade:
+      type: object
+      properties:
+        id: {type: string, format: uuid}
+        symbol: {type: string}
+        claim: {type: string}
+        price: {type: number, format: double}
+        qty: {type: integer, format: uint64}
+        timestamp: {type: integer, format: uint64}

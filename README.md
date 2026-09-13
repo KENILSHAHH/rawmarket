@@ -250,6 +250,8 @@ cargo test --manifest-path engine/Cargo.toml
 npm --prefix web run build
 ```
 
+Programmatic trading documentation is in [`docs/API.md`](docs/API.md), with the machine-readable contract in [`docs/openapi.yaml`](docs/openapi.yaml).
+
 Useful endpoints:
 
 ```text
