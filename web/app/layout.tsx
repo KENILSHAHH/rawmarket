@@ -1,3 +1,4 @@
+import '@fontsource-variable/inter';
 import './globals.css';
 export const metadata={
   title:'RawMarket | Tokenized Commodity Exchange',
