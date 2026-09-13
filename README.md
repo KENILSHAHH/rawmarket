@@ -1,348 +1,160 @@
 # RawMarket
 
-### A Hedera-integrated spot venue for transparent US commodity markets
+RawMarket is a spot trading venue for tokenized representations of US commodity benchmarks. It combines a deterministic Rust central limit order book with a professional Next.js trading terminal and public Hedera testnet evidence.
 
-RawMarket is a hackathon MVP for trading spot representations of US commodity benchmarks through a deterministic Rust central limit order book. Hedera testnet supplies interim HTS asset identities, a public EVM series/settlement registry and the partially deployed ATS security-token infrastructure path.
+[Open RawMarket](https://rawmarket-terminal.vercel.app)
 
-The product is designed in the style of a modern professional trading terminal: a market selector, source-backed charts, live order books, a spot order ticket, balances, positions, and settlement evidence. It is intentionally spot-only: there is no leverage, no liquidation engine, no naked shorting, and no perpetual contract.
+The venue is spot-only. Users buy and sell funded inventory through market, limit, and post-only orders. There is no leverage, liquidation engine, perpetual funding rate, or naked short selling.
 
-[Live product](https://rawmarket-terminal.vercel.app) · [Documentation](docs/README.md) · [ETHGlobal submission copy](docs/ETHGLOBAL_SUBMISSION.md) · [Three-minute demo script](docs/DEMO_SCRIPT.md) · [Hedera integration](docs/HEDERA_INTEGRATION.md) · [Data methodology](docs/DATA_METHODOLOGY.md) · [Trading API](docs/API.md)
+## Product
 
-> **Important status note**
->
-> The Rust CLOB and UI are functional. A RawMarket settlement contract, eight series, and interim HTS test tokens are deployed on Hedera testnet. The pinned ATS deployment is partially complete: the BLR infrastructure and 28 of 108 facets have deployed, but the ATS factory/configuration and ATS-issued market assets are not yet complete because the operator account needs more testnet HBAR. The repository records this honestly and does not present plain HTS tokens as ATS security tokens.
+The trading terminal provides:
 
-## Live deployment
+- a unified market selector for US commodity products;
+- source-labelled candlestick charts with ranges from 1D to 25Y;
+- live bid and ask depth;
+- recent matched trades;
+- market, limit, and post-only order entry;
+- cash and inventory reservation before execution;
+- open orders, order history, fills, and balances; and
+- clickable Hedera receipts for accepted orders.
 
-- Trading terminal: [rawmarket-terminal.vercel.app](https://rawmarket-terminal.vercel.app)
-- Rust matching engine: [qr87wwmycq.us-east-1.awsapprunner.com](https://qr87wwmycq.us-east-1.awsapprunner.com)
-- Engine health: [qr87wwmycq.us-east-1.awsapprunner.com/health](https://qr87wwmycq.us-east-1.awsapprunner.com/health)
+Each market keeps its benchmark value, order-book prices, matched trade price, portfolio mark, and final settlement fixing conceptually separate. Market-maker quotes and exchange trades never replace a missing benchmark observation.
 
-The engine runs as a non-root Linux container on AWS App Runner. AWS CodeBuild performs the reproducible x86-64 image build, stores the image in private ECR, and App Runner supplies the public TLS endpoint and health checks. The Vercel production build is configured with this endpoint through `NEXT_PUBLIC_ENGINE_URL`.
+## Markets
 
-This is a public hackathon demo service. Its balances and order state are currently in memory and reset when App Runner replaces the container. Authentication, durable command persistence, multi-instance coordination, rate limiting, and Hedera-backed settlement remain required before production use.
-
-### Fastest judge demo
-
-1. Open the terminal and keep **MILK/USD** selected.
-2. Click **Fund test wallet** to receive $10,000 process-local demo USD.
-3. Select **Market**, enter quantity `1`, and click **Buy MILK**.
-4. Observe the best ask size decrease, engine sequence advance, cash decrease and MILK inventory increase.
-5. Place a limit bid below the best bid, inspect it under **Open orders**, then cancel it and observe reserved cash return to available cash.
-6. Open the [HashScan contract](https://hashscan.io/testnet/contract/0x553678C79D4F38d0C7b1297824048887059AD7BA) and the [Hedera evidence document](docs/HEDERA_INTEGRATION.md).
-
-## What the product does
-
-RawMarket presents one US-facing market family for each product, with no state-specific or city-specific trading screens. The initial catalog is:
-
-| Symbol | Product | Quotation unit | Data status |
+| Symbol | Benchmark | Quotation unit | Status |
 | --- | --- | --- | --- |
-| MILK | US Class III Milk | USD/cwt | One verified USDA fixing captured; live history gate pending |
-| POTATO | RawMarket US Russet Potato Index v1 | USD/50 lb carton | Historical/demo until the 90-day audit passes |
-| TOMATO | RawMarket US Round Tomato Index v1 | USD/25 lb carton | Historical/demo until the 90-day audit passes |
-| WHEAT | RawMarket US Wheat Index v1 | USD/bushel | Historical/demo; source adapter gate pending |
-| CORN | RawMarket US Corn Index v1 | USD/bushel | Historical/demo; source adapter gate pending |
-| RICE | RawMarket US Rice Index v1 | USD/cwt | Historical/demo; source adapter gate pending |
-| SOYBEAN | RawMarket US Soybean Index v1 | USD/bushel | Historical/demo; source adapter gate pending |
-| DRY_BEAN | RawMarket US Dry Bean Index v1 | USD/cwt | Historical/demo; source adapter gate pending |
+| MILK | USDA Class III Milk | USD/cwt | Official historical series integrated |
+| POTATO | RawMarket US Russet Potato Index v1 | USD/50 lb carton | Historical/demo pending coverage audit |
+| TOMATO | RawMarket US Round Tomato Index v1 | USD/25 lb carton | Historical/demo pending coverage audit |
+| WHEAT | RawMarket US Wheat Index v1 | USD/bushel | Historical/demo pending source adapter |
+| CORN | RawMarket US Corn Index v1 | USD/bushel | Historical/demo pending source adapter |
+| RICE | RawMarket US Rice Index v1 | USD/cwt | Historical/demo pending source adapter |
+| SOYBEAN | RawMarket US Soybean Index v1 | USD/bushel | Historical/demo pending source adapter |
+| DRY_BEAN | RawMarket US Dry Bean Index v1 | USD/cwt | Historical/demo pending source adapter |
 
-The user can connect the demo wallet, receive demo USD, view depth, and place buy or sell spot limit orders. A sell order requires inventory; the engine does not permit an unfunded short sale.
+MILK uses the USDA-announced Class III price for the named month. The reference exposure is 2,000 cwt, equivalent to 200,000 pounds.
 
-The public terminal now runs on Next.js 16 and React 19. Each browser receives a persistent demo identity, can claim test funds once per engine session, execute immediate-or-cancel market orders against the displayed book, rest post-only or ordinary limit orders, inspect personal fills and open orders, and cancel orders with reservation release. These are real commands against the AWS-hosted Rust engine, while the balances remain explicitly labelled demo balances rather than user-controlled HTS funds.
+The produce indices are RawMarket calculations, not official USDA national averages. Compatible observations are normalized by commodity, variety, grade, size, package, origin policy, and shipping-point basis. Each reporting area contributes at most one representative midpoint, and the daily index is the median of eligible area values. The methodology does not treat shipment quantities as prices and does not describe the result as VWAP.
 
-## Product flow and implementation boundary
+## Architecture
 
 ```text
-Archived USDA evidence ──► deterministic importer ──► embedded history store ──► Next.js terminal
-                                                                      │
-                                                                      │ live REST/TLS
-                                                                      ▼
-                                                          Rust price-time CLOB on AWS
-                                                                      │
-                                         proposed settlement boundary │ not yet atomic
-                                                                      ▼
-Hedera testnet: EVM registry + interim HTS tokens + partial ATS infrastructure
+Official USDA publications
+          │
+          ▼
+Deterministic source adapters ──► validated, source-hashed market history
+                                              │
+                                              ▼
+Next.js trading terminal ◄──── REST/TLS ────► Rust CLOB on AWS
+                                              │
+                                              ▼
+                                  Hedera order receipt contract
+                                              │
+                                  Mirror Node + HashScan evidence
+
+Hedera settlement registry ──► series, oracle sequence, fixing and claim accounting
+HTS test assets             ──► public testnet token identities
+ATS infrastructure         ──► controlled-asset issuance and lifecycle foundation
 ```
 
-The terminal-to-CLOB path is implemented and live. Every accepted user order is also acknowledged by the deployed `RawMarketOrderReceipts` contract, and its confirmed transaction is linked from the terminal through HashScan. This receipt proves order acceptance metadata; current engine fills still do not atomically transfer HTS/ATS assets.
+### Trading terminal
 
-### 1. Discover a market
+The frontend uses Next.js, React, TypeScript, and TradingView Lightweight Charts. It is deployed on Vercel and communicates with the matching engine over HTTPS. The interface is organized into market summary, chart, order book, recent trades, order entry, portfolio, and methodology components.
 
-The terminal shows the symbol, unit, reference price, mark, expiry, market status, and spot mode. The UI separates:
+### Rust matching engine
 
-- the benchmark/reference value;
-- the order-book bid and ask;
-- the last engine-confirmed fill;
-- the portfolio mark; and
-- the final settlement fixing.
+The engine uses Tokio and Axum for transport while keeping matching logic isolated from external I/O. Its order books use integer price ticks, whole-number lots, and price-time priority backed by `BTreeMap<PriceTicks, VecDeque<OrderId>>` queues.
 
-These values are not interchangeable.
+The engine supports partial fills, cancellation, immediate-or-cancel market orders, post-only orders, self-trade prevention, idempotent client order IDs, resting-price execution, and monotonic sequence numbers. Cash or inventory is reserved before an order becomes executable so the same balance cannot fund multiple active orders.
 
-### 2. Inspect verified price data
+The public engine runs as a non-root container on AWS App Runner. Images are built with AWS CodeBuild and stored in private ECR.
 
-The terminal uses TradingView Lightweight Charts with scroll, zoom, crosshair and 1D through 25Y range controls. MILK includes 440 official monthly Federal Order Class III observations from January 1990 through August 2026. A displayed milk candle is a transparent fixing-change bar: its open is the previous official monthly fixing, its close is the current fixing, and its high/low are the two endpoints. It does not claim to contain invented intramonth trading data.
+### Market data
 
-The history is stored in [`engine/data/market-history.json`](engine/data/market-history.json), embedded into the Rust service image, and reproducibly generated by [`scripts/import_class_iii_history.py`](scripts/import_class_iii_history.py). Products without a compatible audited history continue to show **No compatible history** rather than a proxy silently presented as the settlement benchmark.
+Source documents and hashes are preserved under `sources/`. Validated history is embedded in the Rust service and served to the chart API without fabricating missing observations.
 
-The exact reports, ATS documentation snapshots and SHA-256 hashes used by the demo are archived under [`sources/archive`](sources/archive) and indexed by [`sources/manifest.json`](sources/manifest.json). The CME specification page is recorded as accessed but still marked archive-pending rather than silently treated as preserved evidence.
+MILK contains official monthly Class III history from 1990 onward. Its visual bars are fixing-change candles: the previous monthly fixing is the open, the current fixing is the close, and the endpoints determine high and low. They are not represented as intramonth trade OHLC data.
 
-### 3. Trade spot inventory
+Markets without compatible audited history return an unavailable state instead of displaying synthetic benchmark history.
 
-The order ticket supports:
+## Hedera integration
 
-- buy and sell;
-- market and limit order modes in the UI;
-- integer quantity lots;
-- price and order-value preview;
-- cash and inventory checks; and
-- reservation before an order becomes executable.
+RawMarket uses Hedera in four distinct layers.
 
-The current Rust demo transport uses a `SPOT` book for each symbol. The CLOB has seven seeded bid levels and seven seeded ask levels per market so the terminal is usable during the demo. These levels are explicitly demo market-maker liquidity and are not reported as real market volume.
+### Order receipts
 
-## Market specifications
+Every accepted user order is submitted by the AWS engine to `RawMarketOrderReceipts` on Hedera testnet. The contract emits an immutable `OrderRecorded` event containing:
 
-### MILK
+- the hashed engine order ID;
+- market symbol;
+- hashed wallet reference;
+- buy or sell direction;
+- integer price ticks;
+- quantity; and
+- engine sequence number.
 
-- Benchmark: USDA-announced Class III milk price for the named month.
-- Quote: USD per hundredweight.
-- Contract reference exposure: 2,000 cwt / 200,000 pounds.
-- Source evidence: CME Class III specifications and the USDA Class and Component Prices report.
-- No substitution with Class I, Class II, Class IV, retail milk, or a previous month is permitted.
+The engine waits for Hedera consensus, resolves the native transaction ID through Mirror Node, and returns both the EVM hash and Hedera transaction ID to the terminal. The user can open the exact transaction from the order confirmation or Order history in HashScan.
 
-### POTATO
+The signer is held by AWS Secrets Manager and injected into the App Runner service at runtime. It is not included in the container image, browser bundle, or repository.
 
-- Benchmark: RawMarket US Russet Potato Index v1.
-- Source: USDA National Potato and Onion Report, cross-checked with the National FOB Review where useful.
-- Eligible observation: Russet Norkotah, U.S. One, 70-count, 50-pound cartons.
-- Quote: USD per 50-pound carton.
-- Contract reference size: one 50-pound carton equivalent.
-- Onion records and incompatible grades, sizes, packages, and products are excluded.
+An order receipt proves that the RawMarket engine acknowledged specific order metadata. It is deliberately separate from asset and payment settlement.
 
-### TOMATO
+### Smart-contract settlement registry
 
-- Benchmark: RawMarket US Round Tomato Index v1.
-- Source: USDA National FOB Review, cross-checked with Tomato Fax.
-- Eligible observation: round mature-green tomatoes, 85% U.S. One or Better, 5x6, 25-pound cartons loose.
-- Quote: USD per 25-pound carton.
-- Contract reference size: one 25-pound carton equivalent.
-- Roma, cherry, grape, vine-ripe, and incompatible grade or size records are excluded.
+`RawMarketSettlement` stores series identifiers, multipliers, payout caps, expiries, final benchmark values, oracle sequence numbers, finalization state, and claim-accounting records.
 
-The produce indices are RawMarket calculations, not official USDA national averages. For each eligible observation, the adapter uses the midpoint of the reported “mostly” range, otherwise the midpoint of the ordinary range, or a single reported price. Missing prices, non-price text, shipment quantities, and incompatible records are excluded. One representative value is retained per reporting area, and the daily composite is the median of those area values. This is not called VWAP.
-
-Before a product is promoted from historical/demo mode, the pipeline must pass a 90-day audit covering coverage, stale records, revisions, seasonality, missing days, and specification consistency.
-
-## Rust matching engine
-
-The matching core is intentionally deterministic and isolated from network I/O.
-
-Core properties:
-
-- integer price ticks and quantity lots;
-- checked arithmetic at the matching boundary;
-- price-time priority;
-- `BTreeMap<PriceTicks, VecDeque<OrderId>>` book structure;
-- immediate-or-cancel market orders that never leave an unfilled remainder resting;
-- distinct open, partially filled, filled, cancelled, and expired states;
-- one-time process-local test funding and wallet-specific order/fill retrieval;
-- order lookup for cancellation and state changes;
-- limit orders, partial fills, cancellation, and post-only intent;
-- self-trade prevention;
-- idempotent client order IDs;
-- monotonic engine sequence numbers;
-- execution at the resting order’s price; and
-- explicit order states for accepted, open, filled, cancelled, and rejected commands.
-
-The current MVP process keeps accounts and books in memory. The next production step is durable command logging, reservations, snapshots, deterministic replay, and reconciliation against confirmed Hedera transactions. The current demo CLOB must not be confused with a production exchange clearing system.
-
-## Oracle and benchmark integrity
-
-RawMarket does not assume a Chainlink or Pyth feed for these commodities. The intended oracle path is:
-
-1. capture the official USDA publication;
-2. preserve the exact source document and SHA-256 hash;
-3. parse it with a deterministic adapter;
-4. validate unit, period, freshness, coverage, revisions, and sequence;
-5. produce a signed report with methodology and evidence metadata;
-6. verify the report on Hedera; and
-7. allow settlement only against a valid final report.
-
-A signed report includes the benchmark and series IDs, price and decimals, currency and quotation unit, observation period, publication and ingestion timestamps, methodology version, source-document hashes, constituent count, quality status, and a unique sequence/report identifier.
-
-Multiple relayers can protect delivery of the same USDA publication, but they do not create multiple independent underlying price sources. A single-operator demo must be disclosed as such.
-
-## How Hedera is used
-
-### Hedera Smart Contract Service / EVM relay
-
-RawMarket’s prototype settlement-registry extension is a Solidity contract deployed through Hedera’s EVM-compatible JSON-RPC relay. It stores:
-
-- series identifiers;
-- multipliers and payout caps;
-- expiry timestamps;
-- finalization status;
-- final benchmark values;
-- oracle sequence numbers; and
-- claimable settlement amounts.
-
-The eight RawMarket series have been created in the deployed contract. The current deployment records series, finalization and claimable accounting; it does not custody or transfer HTS collateral. Its signature-array check is not a production threshold-signature verifier. A new audited vault/verifier deployment is required for real settlement. The contract is not a replacement for ATS.
+The current contract is a testnet registry. It does not yet custody collateral or atomically exchange HTS assets and payment for each engine match. Its existing claim and signature paths are prototype accounting controls, not a production collateral vault or threshold-signature oracle.
 
 ### Hedera Token Service
 
-The testnet deployment also created interim fungible HTS tokens for demo USD and the eight spot assets. HTS supplies the native token ledger primitives: token IDs, treasury ownership, supply keys, mint/burn authority, transfers, and mirror-node visibility.
+RawMarket has testnet HTS token identities for demo USD and each commodity market. HTS provides native token IDs, treasury and supply controls, mint and burn primitives, transfers, and Mirror Node visibility.
 
-These are currently plain HTS test tokens. They are recorded for testnet experimentation but are not claimed to be ATS-issued regulated/security assets.
+These tokens are development assets. Trading balances in the current terminal remain engine-managed demo balances and are not presented as user-controlled HTS balances.
 
 ### Asset Tokenization Studio
 
-ATS is the intended tokenization layer for the production-shaped path. It provides the security-token infrastructure around ERC-1400/partial ERC-3643-style controls, including:
+RawMarket pins Hedera Asset Tokenization Studio as the controlled-asset layer. ATS provides issuance, ownership controls, roles, holds, transfer restrictions, partition-aware operations, and redemption lifecycle primitives.
 
-- asset/factory deployment;
-- ownership and transfer controls;
-- compliance and eligibility hooks;
-- holds and controlled transfers;
-- mint and burn roles;
-- partition-aware operations; and
-- redemption/lifecycle capabilities.
+RawMarket supplies the domain-specific components ATS does not provide: commodity benchmark methodology, deterministic matching, reservation accounting, oracle reports, collateral rules, and variable-payoff settlement logic.
 
-RawMarket adds the commodity-specific logic that ATS does not provide by itself: benchmark fixing, collateral accounting, variable payoff, oracle verification, and order-book integration.
+The testnet ATS deployment currently includes ProxyAdmin, the Business Logic Resolver implementation and proxy, and 28 deployed facets. Factory configuration and ATS-issued RawMarket assets are not yet complete. The interim HTS tokens are therefore not described as ATS-issued assets.
 
-The pinned ATS deployment has started on testnet. The BLR proxy, ProxyAdmin, deployment libraries, and the first 28 facets are deployed. The remaining facets, factory, configuration, and ATS-issued commodity assets require additional testnet HBAR and a resumed deployment checkpoint.
+### Mirror Node and HashScan
 
-### Mirror Node and public evidence
+Mirror Node is the independent read path used to resolve contract results, native transaction IDs, token metadata, and public ledger evidence. HashScan provides the user-facing explorer for contracts, tokens, events, and individual order receipts.
 
-Hedera’s Mirror Node is the read path for balances, token metadata, contract activity, transaction confirmation, and audit evidence. HashScan provides a human-readable verification surface for the deployed contract and later ATS assets.
+## Hedera testnet deployments
 
-## Why Hedera is a strong fit
+| Component | Identifier |
+| --- | --- |
+| Order receipt contract | [`0x2D9e26E2558A527B41C61d753305e28b1D611FF3`](https://hashscan.io/testnet/contract/0x2D9e26E2558A527B41C61d753305e28b1D611FF3) |
+| Settlement registry | [`0x553678C79D4F38d0C7b1297824048887059AD7BA`](https://hashscan.io/testnet/contract/0x553678C79D4F38d0C7b1297824048887059AD7BA) |
+| ATS BLR proxy | [`0xf0433BeF9a0838323D57b4a6cbE6976CE66A0A26`](https://hashscan.io/testnet/contract/0xf0433BeF9a0838323D57b4a6cbE6976CE66A0A26) |
+| Demo USD | [`0.0.10522368`](https://hashscan.io/testnet/token/0.0.10522368) |
+| MILK | [`0.0.10522374`](https://hashscan.io/testnet/token/0.0.10522374) |
+| POTATO | [`0.0.10522375`](https://hashscan.io/testnet/token/0.0.10522375) |
+| TOMATO | [`0.0.10522376`](https://hashscan.io/testnet/token/0.0.10522376) |
+| WHEAT | [`0.0.10522378`](https://hashscan.io/testnet/token/0.0.10522378) |
+| CORN | [`0.0.10522379`](https://hashscan.io/testnet/token/0.0.10522379) |
+| RICE | [`0.0.10522380`](https://hashscan.io/testnet/token/0.0.10522380) |
+| SOYBEAN | [`0.0.10522381`](https://hashscan.io/testnet/token/0.0.10522381) |
+| DRY BEAN | [`0.0.10522382`](https://hashscan.io/testnet/token/0.0.10522382) |
 
-RawMarket could be implemented on other chains, so “only possible with Hedera” should be understood as a product-design advantage rather than a literal impossibility. Hedera is particularly well suited because the complete design can use native services instead of assembling every ledger primitive from third-party contracts:
-
-1. **HTS gives commodity and cash balances first-class token identities.** The product can show a Hedera token ID and mirror-node balance rather than representing every asset as an opaque database row.
-2. **EVM compatibility allows Solidity settlement logic.** The same deployment can use familiar Solidity tooling while benefiting from Hedera’s network and explorer ecosystem.
-3. **ATS adds security-token controls instead of forcing RawMarket to recreate them.** Compliance, controlled transfers, holds, roles, and lifecycle operations belong in a tokenization platform rather than in the Rust matcher.
-4. **Fast finality is useful for exchange reconciliation.** The engine can separate matching acknowledgement from confirmed Hedera settlement and reconcile by unique transaction ID.
-5. **Mirror Node APIs make evidence queryable.** A user can inspect token ownership, transaction status, and contract events without trusting a private exchange database.
-6. **HCS is a natural future extension for oracle evidence.** Source hashes, signed fixing reports, and correction/dispute notices can be timestamped on a Hedera topic while the settlement contract verifies the final report.
-7. **Native account, token, and contract identifiers create a clear audit boundary.** Users can distinguish an order-book event from an on-chain transfer and from the final oracle fixing.
-
-The important architectural point is that Hedera does not magically turn an exchange into a compliant financial product. ATS is security-token infrastructure, HTS is a token service, and the RawMarket contracts still need careful collateral, oracle, eligibility, and administrative-role design.
-
-## Testnet deployment artifacts
-
-The public deployment record is [`deployments/hedera-testnet.json`](deployments/hedera-testnet.json).
-
-| Component | Public identifier | Status |
-| --- | --- | --- |
-| RawMarket settlement contract | `0x553678C79D4F38d0C7b1297824048887059AD7BA` | Deployed |
-| RawMarket order receipt contract | `0x2D9e26E2558A527B41C61d753305e28b1D611FF3` | Deployed and connected to the engine |
-| Deployment transaction | `0xdd3859b55287b28c7e297af0ea37a22ad6f75827236162c060af73db279d4544` | Confirmed |
-| Demo USD | `0.0.10522368` | Plain HTS interim token |
-| MILK spot token | `0.0.10522374` | Plain HTS interim token |
-| POTATO spot token | `0.0.10522375` | Plain HTS interim token |
-| TOMATO spot token | `0.0.10522376` | Plain HTS interim token |
-| WHEAT spot token | `0.0.10522378` | Plain HTS interim token |
-| CORN spot token | `0.0.10522379` | Plain HTS interim token |
-| RICE spot token | `0.0.10522380` | Plain HTS interim token |
-| SOYBEAN spot token | `0.0.10522381` | Plain HTS interim token |
-| DRY BEAN spot token | `0.0.10522382` | Plain HTS interim token |
-| ATS BLR proxy | `0xf0433BeF9a0838323D57b4a6cbE6976CE66A0A26` | Partial deployment |
-
-View the settlement contract on [HashScan testnet](https://hashscan.io/testnet/contract/0x553678C79D4F38d0C7b1297824048887059AD7BA).
-
-See [Hedera integration and evidence](docs/HEDERA_INTEGRATION.md) for the exact deployed/partial/not-yet-wired boundary and direct token explorer links.
-
-## Run locally
-
-### Rust engine
-
-```bash
-cargo run --manifest-path engine/Cargo.toml
-```
-
-The engine listens on `http://localhost:8080`.
-
-### Web terminal
-
-```bash
-cd web
-npm install
-npm run dev
-```
-
-Open [http://localhost:3000](http://localhost:3000).
-
-The current UI uses a demo wallet and Rust API. The AWS engine signs the order-receipt transaction through a least-privilege server-side testnet operator key; the browser does not yet sign HashPack/MetaMask transactions or spend a user’s Hedera account. Receipt IDs are public evidence of engine acknowledgement, not proof of HTS payment/asset settlement.
-
-## Verification
-
-```bash
-cargo test --manifest-path engine/Cargo.toml
-npm --prefix web run build
-```
-
-Programmatic trading documentation is in [`docs/API.md`](docs/API.md), with the machine-readable contract in [`docs/openapi.yaml`](docs/openapi.yaml).
-
-Useful endpoints:
-
-```text
-GET  /health
-GET  /api/markets
-GET  /api/book/{symbol}/SPOT
-GET  /api/trades/{symbol}/SPOT
-GET  /api/candles/{symbol}/{interval}
-GET  /api/account/{wallet}
-GET  /api/orders/{wallet}
-GET  /api/fills/{wallet}
-POST /api/fund
-POST /api/orders
-DELETE /api/orders/{id}
-```
-
-## What remains before calling it live
-
-The next required work is not cosmetic:
-
-- resume and complete the ATS deployment from checkpoint `hedera-testnet-2026-09-13T11-39-30-743`;
-- deploy the ATS factory/configuration and issue the commodity assets through ATS;
-- create the collateral vault with actual token transfers and allowance/hold checks;
-- replace the demo wallet with HashPack/MetaMask signing;
-- bind CLOB reservations to confirmed HTS/ATS balances;
-- implement settlement transaction submission, confirmation, replay protection, and unknown-transaction reconciliation;
-- implement threshold-signed oracle reports and finalization rules;
-- persist engine commands and snapshots;
-- expose asset-settlement token and transaction IDs in each fill;
-- add eligibility revocation and ATS hold behavior tests; and
-- complete the 90-day data audits before promoting produce and grain markets.
-
-Until those items are complete, RawMarket is a functional Hedera testnet hackathon MVP and not a live regulated exchange or investment product.
-
-## Security notes
-
-- Never commit operator keys or `.env.local`; these paths are gitignored.
-- The operator key used for the testnet deployment was exposed during development and should be rotated before any serious testing.
-- Testnet tokens have no monetary value, but private-key hygiene still matters.
-- Do not use demo market-maker depth as evidence of real liquidity.
-- Do not use historical/demo benchmark values for financial settlement.
-- Administrative powers, ATS roles, oracle signers, and collateral custody must be minimized and documented before production use.
+The machine-readable deployment record is maintained in `deployments/hedera-testnet.json`.
 
 ## Repository structure
 
 ```text
 rawmarket/
-├── engine/                         Rust matching engine and Axum API
-│   ├── data/                       Validated, source-hashed market history
-│   └── src/market_data.rs          Range queries and fixing-change candles
-├── web/                            Next.js trading terminal
-│   ├── components/trading/         Chart, book, ticket, portfolio and dialogs
-│   ├── hooks/                      Terminal state and polling orchestration
-│   └── lib/                        Typed API, market models and formatting
-├── contracts/                      RawMarket settlement extension
-├── deployments/                    Public Hedera testnet IDs and status
-├── docs/                            Submission, API, Hedera and demo guides
-├── infra/aws/                       Reproducible CodeBuild/ECR/App Runner deployment
-├── scripts/                         Reproducible source importers
-└── sources/                         Archived source documents and hashes
+├── engine/          Rust matching engine, account state, market data, and Hedera writer
+├── web/             Next.js trading terminal
+├── contracts/       Order receipt and settlement contracts
+├── deployments/     Hedera testnet identifiers
+├── sources/         Archived market-data evidence and hashes
+├── scripts/         Deterministic data importers
+└── infra/           AWS deployment infrastructure
 ```
 
-## License and disclaimer
-
-This repository is a hackathon prototype. It is not investment advice, a futures exchange, a broker, a clearinghouse, or a regulated offering. Commodity references are methodology-defined benchmarks, and all testnet balances and tokens are experimental.
+RawMarket’s trust boundary is explicit: the Rust engine determines order priority and matches, Hedera records public order evidence and contract state, and official source publications determine benchmark values. None of those layers is silently substituted for another.
