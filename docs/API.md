@@ -5,8 +5,10 @@ RawMarket exposes a machine-readable REST surface for market makers, trading bot
 Base URL:
 
 ```text
-http://localhost:8080
+https://qr87wwmycq.us-east-1.awsapprunner.com
 ```
+
+For local development, use `http://localhost:8080`.
 
 The public API is currently a testnet/demo interface. It does not yet authorize a caller to spend a Hedera account, and the `wallet` field is not an enterprise identity boundary. Production API keys, signed requests, durable sequencing, and Hedera transaction reconciliation are required before external capital should be used.
 
@@ -42,7 +44,7 @@ curl -X POST http://localhost:8080/api/fund \
 
 ### `GET /health`
 
-Returns `ok` when the HTTP process is running. This does not prove that Hedera, the Mirror Node, the database, or the settlement worker is healthy.
+Returns a JSON service/version response when the HTTP process is running. This does not prove that Hedera, the Mirror Node, persistence, or the settlement worker is healthy.
 
 ### `GET /api/markets`
 
@@ -79,7 +81,7 @@ Prices are quoted in the market’s declared unit. `sequence` is monotonic for t
 
 ### `GET /api/trades/{symbol}/SPOT`
 
-Returns up to the most recent 20 settled demo fills. A production trade feed must include Hedera settlement status and transaction ID; a match proposal must not be presented as a confirmed trade.
+Returns up to the most recent 50 engine-confirmed demo fills. A production trade feed must include Hedera settlement status and transaction ID; a match proposal must not be presented as an on-chain confirmed trade.
 
 ### `GET /api/candles/{symbol}/{interval}`
 
@@ -108,9 +110,17 @@ An empty `candles` array is a valid and meaningful result. Clients must not inte
 
 Returns the local demo account, cash reservations, inventory, and open-order count. In production this endpoint must be keyed by an authenticated principal, not an arbitrary URL wallet string.
 
+### `GET /api/orders/{wallet}`
+
+Returns the wallet's order history, including `limit`/`market` type, original quantity, filled quantity, remaining quantity and the distinct `open`, `partially_filled`, `filled`, `cancelled`, or `expired` state.
+
+### `GET /api/fills/{wallet}`
+
+Returns up to 100 fills in which the wallet was the buyer or seller.
+
 ### `POST /api/fund`
 
-Demo-only faucet. It increases the local demo cash balance and does not mint HTS tokens or transfer HBAR. It must be disabled outside local/testnet demonstrations.
+Demo-only faucet. It grants at most $10,000 once per process-local wallet and does not mint HTS tokens or transfer HBAR. It must be disabled outside local/testnet demonstrations.
 
 Request:
 
@@ -120,7 +130,7 @@ Request:
 
 ### `POST /api/orders`
 
-Places a spot limit order and attempts matching immediately.
+Places a spot limit or immediate-or-cancel market order and attempts matching immediately.
 
 Request:
 
@@ -133,7 +143,8 @@ Request:
   "price":16.61,
   "qty":5,
   "client_id":"bot-001-milk-000001",
-  "post_only":true
+  "post_only":true,
+  "order_type":"limit"
 }
 ```
 
@@ -141,7 +152,9 @@ Rules:
 
 - `side` is `buy` or `sell`.
 - `claim` must be `SPOT` in the current venue.
-- `price` must be positive and is rounded to the market tick.
+- `order_type` is `limit` or `market`.
+- `price` must be positive for a limit order and is rounded to the market tick.
+- A market order executes immediate-or-cancel at the current best displayed price; unfilled quantity never rests.
 - `qty` must be a positive integer lot.
 - Buy orders reserve demo USD before execution.
 - Sell orders reserve available spot inventory.
@@ -160,14 +173,17 @@ The response is an array because one taker order can produce multiple fills and 
     "claim":"SPOT",
     "wallet":"bot-001",
     "side":"buy",
+    "order_type":"limit",
     "price":16.61,
+    "qty":5,
+    "filled":5,
     "remaining":0,
-    "status":"filled/cancelled"
+    "status":"filled"
   }
 ]
 ```
 
-`filled/cancelled` is a legacy demo status. The production API will split this into `filled`, `partially_filled`, `cancelled`, `rejected`, `matched_pending_settlement`, `settled`, and `settlement_failed`.
+The engine now separates `open`, `partially_filled`, `filled`, `cancelled`, and IOC `expired` states. Hedera integration must add `matched_pending_settlement`, `settled`, and `settlement_failed` without conflating a match with chain finality.
 
 ### `DELETE /api/orders/{id}`
 

@@ -1,61 +1,828 @@
-use axum::{extract::{Path, State}, http::StatusCode, routing::{delete, get, post}, Json, Router};
+use axum::{
+    extract::{Path, State},
+    http::StatusCode,
+    routing::{get, post},
+    Json, Router,
+};
 use rawmarket_engine::{Book, Order, Side};
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, sync::{Arc, Mutex}};
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+};
 use tower_http::cors::CorsLayer;
 use uuid::Uuid;
 
-#[derive(Clone, Serialize)] struct Market { symbol:String, name:String, unit:String, m:u64, cap:u64, status:String, expiry:String, description:String, reference:f64 }
-fn markets()->Vec<Market>{vec![m("MILK","US Class III Milk","USD/cwt",2000,25,"live demo","USDA announced Class III price; 2,000 cwt / 200,000 lb exposure",16.64),m("POTATO","RawMarket US Russet Potato Index v1","USD / 50 lb carton",1,35,"historical/demo","Russet Norkotah; U.S. One; 70-count; 50 lb cartons",20.0),m("TOMATO","RawMarket US Round Tomato Index v1","USD / 25 lb carton",1,40,"historical/demo","Round mature-green; U.S. One or better; 5x6; 25 lb cartons",18.0),m("WHEAT","RawMarket US Wheat Index v1","USD / bushel",1,15,"historical/demo","US domestic cash benchmark; audit gate before issuance",6.1),m("CORN","RawMarket US Corn Index v1","USD / bushel",1,10,"historical/demo","US domestic cash benchmark; audit gate before issuance",4.5),m("RICE","RawMarket US Rice Index v1","USD / cwt",1,30,"historical/demo","US long-grain benchmark; audit gate before issuance",18.0),m("SOYBEAN","RawMarket US Soybean Index v1","USD / bushel",1,25,"historical/demo","US domestic cash benchmark; audit gate before issuance",10.2),m("DRY_BEAN","RawMarket US Dry Bean Index v1","USD / cwt",1,80,"historical/demo","US dry edible bean benchmark; audit gate before issuance",42.0)]}
-fn m(s:&str,n:&str,u:&str,m:u64,c:u64,st:&str,d:&str,r:f64)->Market{Market{symbol:s.into(),name:n.into(),unit:u.into(),m,cap:c,status:st.into(),expiry:"2026-10-31T14:00:00Z".into(),description:d.into(),reference:r}}
-#[derive(Clone, Default, Serialize)] struct Position { available:u64, reserved:u64 }
-#[derive(Clone, Default, Serialize)] struct Account { wallet:String, cash:f64, reserved_cash:f64, positions:HashMap<String,Position> }
-#[derive(Clone)] struct Tracked { wallet:String, key:String, side:Side, price:f64, remaining:u64 }
-struct App { markets:Vec<Market>, books:HashMap<String,Book>, accounts:HashMap<String,Account>, tracked:HashMap<Uuid,Tracked>, fills:Vec<Trade> }
-type Shared=Arc<Mutex<App>>;
-#[derive(Serialize)] struct AccountView { wallet:String, cash:f64, reserved_cash:f64, available_cash:f64, positions:HashMap<String,Position>, open_orders:usize }
-#[derive(Serialize)] struct Level { price:f64, size:u64, total:f64 }
-#[derive(Serialize)] struct BookView { symbol:String, claim:String, bids:Vec<Level>, asks:Vec<Level>, last:f64, sequence:u64 }
-#[derive(Serialize)] struct Candle { time:String, open:f64, high:f64, low:f64, close:f64, volume:f64, source:String }
-#[derive(Serialize)] struct CandleResponse { interval:String, source_status:String, coverage:String, candles:Vec<Candle> }
-#[derive(Clone,Serialize)] struct Trade { id:Uuid, symbol:String, claim:String, price:f64, qty:u64, timestamp:u64 }
-#[derive(Serialize)] struct OrderView { id:Uuid, symbol:String, claim:String, wallet:String, side:String, price:f64, remaining:u64, status:String }
-#[derive(Deserialize)] struct FundReq { wallet:String, amount:Option<f64> }
-#[derive(Deserialize)] struct PlaceReq { wallet:String, symbol:String, claim:String, side:String, price:f64, qty:u64, client_id:String, post_only:Option<bool> }
-fn key(symbol:&str,claim:&str)->String{format!("{}:{}",symbol.to_uppercase(),claim.to_uppercase())}
-fn err(e:impl ToString)->(StatusCode,String){(StatusCode::BAD_REQUEST,e.to_string())}
-fn acct<'a>(app:&'a mut App,wallet:&str)->&'a mut Account{app.accounts.entry(wallet.to_string()).or_insert_with(||Account{wallet:wallet.to_string(),..Default::default()})}
-fn ensure_book(app:&mut App,k:&str){
- if app.books.contains_key(k){return}
- let symbol=k.split(':').next().unwrap_or("MILK");
- let p=app.markets.iter().find(|m|m.symbol==symbol).map(|m|m.reference).unwrap_or(12.5);
- let maker="demo-maker".to_string();
- let maker_account=acct(app,&maker);
- maker_account.cash=1_000_000.0;
- maker_account.positions.entry(k.to_string()).or_insert(Position{available:10_000,reserved:0});
- let step=(p*0.002).max(0.01);
- let quantities=[100,150,200,250,300,400,500];
- let mut b=Book::default();
- for (i,qty) in quantities.into_iter().enumerate(){
-  for (side,price,client) in [(Side::Short,p+step*(i as f64+1.0),format!("seed-ask-{i}")),(Side::Long,p-step*(i as f64+1.0),format!("seed-bid-{i}"))]{
-   let ticks=(price*100.0).round() as u64; let displayed=ticks as f64/100.0; let id=Uuid::new_v4();
-   let _=b.place(Order{id,client_id:client,owner:maker.clone(),side,price_ticks:ticks,qty,remaining:qty,post_only:false,seq:0});
-   app.tracked.insert(id,Tracked{wallet:maker.clone(),key:k.into(),side,price:displayed,remaining:qty});
-  }
- }
- app.books.insert(k.into(),b);
+#[derive(Clone, Serialize)]
+struct Market {
+    symbol: String,
+    name: String,
+    unit: String,
+    m: u64,
+    cap: u64,
+    status: String,
+    expiry: String,
+    description: String,
+    reference: f64,
 }
-fn view(app:&App,wallet:&str)->AccountView{let a=app.accounts.get(wallet).cloned().unwrap_or_else(||Account{wallet:wallet.into(),..Default::default()});AccountView{wallet:a.wallet,cash:a.cash,reserved_cash:a.reserved_cash,available_cash:a.cash-a.reserved_cash,positions:a.positions,open_orders:app.tracked.values().filter(|o|o.wallet==wallet&&o.remaining>0).count()}}
-fn ov(id:Uuid,o:&Tracked)->OrderView{OrderView{id,symbol:o.key.split(':').next().unwrap_or("").into(),claim:o.key.split(':').nth(1).unwrap_or("").into(),wallet:o.wallet.clone(),side:if o.side==Side::Long{"buy".into()}else{"sell".into()},price:o.price,remaining:o.remaining,status:if o.remaining==0{"filled/cancelled".into()}else{"open".into()}}}
-fn now()->u64{use std::time::{SystemTime,UNIX_EPOCH};SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs()}
-async fn list_markets(State(s):State<Shared>)->Json<Vec<Market>>{Json(s.lock().unwrap().markets.clone())}
-async fn fund(State(s):State<Shared>,Json(r):Json<FundReq>)->Result<Json<AccountView>,(StatusCode,String)>{let mut a=s.lock().unwrap();let x=acct(&mut a,&r.wallet);x.cash+=r.amount.unwrap_or(10_000.0);Ok(Json(view(&a,&r.wallet)))}
-async fn account(Path(wallet):Path<String>,State(s):State<Shared>)->Json<AccountView>{let a=s.lock().unwrap();Json(view(&a,&wallet))}
-async fn book(Path((symbol,claim)):Path<(String,String)>,State(s):State<Shared>)->Json<BookView>{let mut a=s.lock().unwrap();let k=key(&symbol,&claim);ensure_book(&mut a,&k);let b=a.books.get(&k).unwrap();let (bs,as_)=b.snapshot();let levels=|xs:Vec<(u64,u64)>|xs.into_iter().map(|(p,n)|Level{price:p as f64/100.0,size:n,total:p as f64*n as f64/100.0}).collect();Json(BookView{symbol,claim,bids:levels(bs),asks:levels(as_),last:b.mid().unwrap_or(0) as f64/100.0,sequence:b.sequence()})}
-async fn place(State(s):State<Shared>,Json(r):Json<PlaceReq>)->Result<Json<Vec<OrderView>>,(StatusCode,String)>{if r.price<=0.0||r.qty==0{return Err(err("price and quantity must be positive"))}let mut a=s.lock().unwrap();let k=key(&r.symbol,&r.claim);ensure_book(&mut a,&k);let side=match r.side.to_lowercase().as_str(){"buy"=>Side::Long,"sell"=>Side::Short,_=>return Err(err("side must be buy or sell"))};let p=(r.price*100.0).round()/100.0;let cost=p*r.qty as f64;let x=acct(&mut a,&r.wallet);if side==Side::Long{if x.cash-x.reserved_cash<cost{return Err(err("insufficient available demo USD"))}x.reserved_cash+=cost;}else{let z=x.positions.entry(k.clone()).or_default();if z.available<z.reserved+r.qty{return Err(err("sell requires available claims; naked shorting is disabled"))}z.reserved+=r.qty;}
-let id=Uuid::new_v4();let o=Order{id,client_id:r.client_id,owner:r.wallet.clone(),side,price_ticks:(p*100.0) as u64,qty:r.qty,remaining:r.qty,post_only:r.post_only.unwrap_or(false),seq:0};let (_,fills)={let b=a.books.get_mut(&k).unwrap();b.place(o).map_err(|e|err(format!("order rejected: {:?}",e)))?};let mut taker=Tracked{wallet:r.wallet.clone(),key:k.clone(),side,price:p,remaining:r.qty};let mut ids=vec![id];for f in fills{ids.push(f.maker);let maker=a.tracked.get(&f.maker).cloned().ok_or_else(||err("maker state missing"))?;let (buyer,seller)=if side==Side::Long{(taker.clone(),maker.clone())}else{(maker.clone(),taker.clone())};let v=f.price_ticks as f64/100.0*f.qty as f64;let held=buyer.price*f.qty as f64;let ba=acct(&mut a,&buyer.wallet);ba.cash=(ba.cash-v).max(0.0);ba.reserved_cash=(ba.reserved_cash-held).max(0.0);ba.positions.entry(k.clone()).or_default().available+=f.qty;let sa=acct(&mut a,&seller.wallet);sa.cash+=v;let sp=sa.positions.entry(k.clone()).or_default();sp.reserved=sp.reserved.saturating_sub(f.qty);sp.available=sp.available.saturating_sub(f.qty);a.fills.push(Trade{id:Uuid::new_v4(),symbol:r.symbol.clone(),claim:r.claim.clone(),price:f.price_ticks as f64/100.0,qty:f.qty,timestamp:now()});taker.remaining=taker.remaining.saturating_sub(f.qty);if let Some(m)=a.tracked.get_mut(&f.maker){m.remaining=m.remaining.saturating_sub(f.qty)}}a.tracked.insert(id,taker);let out=ids.into_iter().filter_map(|x|a.tracked.get(&x).map(|o|ov(x,o))).collect();Ok(Json(out))}
-async fn cancel(Path(id):Path<Uuid>,State(s):State<Shared>)->Result<Json<OrderView>,(StatusCode,String)>{let mut a=s.lock().unwrap();let o=a.tracked.get(&id).cloned().ok_or_else(||err("unknown order"))?;if o.remaining==0{return Err(err("order already inactive"))}a.books.get_mut(&o.key).ok_or_else(||err("book missing"))?.cancel(id).map_err(|e|err(format!("cancel rejected: {:?}",e)))?;if let Some(x)=a.accounts.get_mut(&o.wallet){if o.side==Side::Long{x.reserved_cash=(x.reserved_cash-o.price*o.remaining as f64).max(0.0)}}if let Some(x)=a.tracked.get_mut(&id){x.remaining=0}Ok(Json(ov(id,&o)))}
-async fn trades(Path((symbol,claim)):Path<(String,String)>,State(s):State<Shared>)->Json<Vec<Trade>>{let a=s.lock().unwrap();Json(a.fills.iter().filter(|t|t.symbol.eq_ignore_ascii_case(&symbol)&&t.claim.eq_ignore_ascii_case(&claim)).cloned().rev().take(20).collect())}
-async fn candles(Path((symbol,interval)):Path<(String,String)>,State(s):State<Shared>)->Json<CandleResponse>{let a=s.lock().unwrap();let m=a.markets.iter().find(|m|m.symbol.eq_ignore_ascii_case(&symbol));let (status,coverage,candles)=match m{Some(x) if x.symbol=="MILK"=>("verified USDA fixing".to_string(),"1 official observation captured; no continuous history".to_string(),vec![Candle{time:"2026-09-02".into(),open:x.reference,high:x.reference,low:x.reference,close:x.reference,volume:0.0,source:"USDA Class III announcement".into()}]),Some(_)=>("historical/demo; not chartable as live market data".into(),"No verified compatible fixing series loaded".into(),vec![]),None=>("unknown market".into(),"No data".into(),vec![])};Json(CandleResponse{interval,source_status:status,coverage,candles})}
-async fn health()->&'static str{"ok"}
-#[tokio::main]async fn main(){let shared=Arc::new(Mutex::new(App{markets:markets(),books:HashMap::new(),accounts:HashMap::new(),tracked:HashMap::new(),fills:vec![]}));let app=Router::new().route("/api/markets",get(list_markets)).route("/api/fund",post(fund)).route("/api/account/{wallet}",get(account)).route("/api/book/{symbol}/{claim}",get(book)).route("/api/trades/{symbol}/{claim}",get(trades)).route("/api/candles/{symbol}/{interval}",get(candles)).route("/api/orders",post(place)).route("/api/orders/{id}",delete(cancel)).route("/health",get(health)).layer(CorsLayer::permissive()).with_state(shared);let port=std::env::var("PORT").unwrap_or_else(|_|"8080".into());let address=format!("0.0.0.0:{port}");let l=tokio::net::TcpListener::bind(&address).await.unwrap();println!("RawMarket engine listening on {address}");axum::serve(l,app).await.unwrap();}
+
+fn market(
+    symbol: &str,
+    name: &str,
+    unit: &str,
+    multiplier: u64,
+    cap: u64,
+    status: &str,
+    description: &str,
+    reference: f64,
+) -> Market {
+    Market {
+        symbol: symbol.into(),
+        name: name.into(),
+        unit: unit.into(),
+        m: multiplier,
+        cap,
+        status: status.into(),
+        expiry: "2026-10-31T14:00:00Z".into(),
+        description: description.into(),
+        reference,
+    }
+}
+
+fn markets() -> Vec<Market> {
+    vec![
+        market(
+            "MILK",
+            "US Class III Milk",
+            "USD/cwt",
+            2000,
+            25,
+            "live demo",
+            "USDA announced Class III price; 2,000 cwt / 200,000 lb reference exposure",
+            16.64,
+        ),
+        market(
+            "POTATO",
+            "RawMarket US Russet Potato Index v1",
+            "USD / 50 lb carton",
+            1,
+            35,
+            "historical/demo",
+            "Russet Norkotah; U.S. One; 70-count; 50 lb cartons",
+            20.0,
+        ),
+        market(
+            "TOMATO",
+            "RawMarket US Round Tomato Index v1",
+            "USD / 25 lb carton",
+            1,
+            40,
+            "historical/demo",
+            "Round mature-green; U.S. One or better; 5x6; 25 lb cartons",
+            18.0,
+        ),
+        market(
+            "WHEAT",
+            "RawMarket US Wheat Index v1",
+            "USD / bushel",
+            1,
+            15,
+            "historical/demo",
+            "US domestic cash benchmark; audit gate before issuance",
+            6.1,
+        ),
+        market(
+            "CORN",
+            "RawMarket US Corn Index v1",
+            "USD / bushel",
+            1,
+            10,
+            "historical/demo",
+            "US domestic cash benchmark; audit gate before issuance",
+            4.5,
+        ),
+        market(
+            "RICE",
+            "RawMarket US Rice Index v1",
+            "USD / cwt",
+            1,
+            30,
+            "historical/demo",
+            "US long-grain benchmark; audit gate before issuance",
+            18.0,
+        ),
+        market(
+            "SOYBEAN",
+            "RawMarket US Soybean Index v1",
+            "USD / bushel",
+            1,
+            25,
+            "historical/demo",
+            "US domestic cash benchmark; audit gate before issuance",
+            10.2,
+        ),
+        market(
+            "DRY_BEAN",
+            "RawMarket US Dry Bean Index v1",
+            "USD / cwt",
+            1,
+            80,
+            "historical/demo",
+            "US dry edible bean benchmark; audit gate before issuance",
+            42.0,
+        ),
+    ]
+}
+
+#[derive(Clone, Default, Serialize)]
+struct Position {
+    available: u64,
+    reserved: u64,
+}
+
+#[derive(Clone, Default, Serialize)]
+struct Account {
+    wallet: String,
+    cash: f64,
+    reserved_cash: f64,
+    positions: HashMap<String, Position>,
+    #[serde(skip)]
+    funded: bool,
+}
+
+#[derive(Clone)]
+struct Tracked {
+    wallet: String,
+    key: String,
+    side: Side,
+    price: f64,
+    qty: u64,
+    remaining: u64,
+    filled: u64,
+    status: String,
+    order_type: String,
+    created_at: u64,
+}
+
+struct App {
+    markets: Vec<Market>,
+    books: HashMap<String, Book>,
+    accounts: HashMap<String, Account>,
+    tracked: HashMap<Uuid, Tracked>,
+    fills: Vec<Trade>,
+}
+
+type Shared = Arc<Mutex<App>>;
+
+#[derive(Serialize)]
+struct AccountView {
+    wallet: String,
+    cash: f64,
+    reserved_cash: f64,
+    available_cash: f64,
+    positions: HashMap<String, Position>,
+    open_orders: usize,
+    funded: bool,
+}
+
+#[derive(Serialize)]
+struct Level {
+    price: f64,
+    size: u64,
+    total: f64,
+}
+
+#[derive(Serialize)]
+struct BookView {
+    symbol: String,
+    claim: String,
+    bids: Vec<Level>,
+    asks: Vec<Level>,
+    last: f64,
+    sequence: u64,
+}
+
+#[derive(Serialize)]
+struct Candle {
+    time: String,
+    open: f64,
+    high: f64,
+    low: f64,
+    close: f64,
+    volume: f64,
+    source: String,
+}
+
+#[derive(Serialize)]
+struct CandleResponse {
+    interval: String,
+    source_status: String,
+    coverage: String,
+    candles: Vec<Candle>,
+}
+
+#[derive(Clone, Serialize)]
+struct Trade {
+    id: Uuid,
+    symbol: String,
+    claim: String,
+    price: f64,
+    qty: u64,
+    buyer: String,
+    seller: String,
+    timestamp: u64,
+}
+
+#[derive(Serialize)]
+struct OrderView {
+    id: Uuid,
+    symbol: String,
+    claim: String,
+    wallet: String,
+    side: String,
+    order_type: String,
+    price: f64,
+    qty: u64,
+    filled: u64,
+    remaining: u64,
+    status: String,
+    created_at: u64,
+}
+
+#[derive(Deserialize)]
+struct FundReq {
+    wallet: String,
+    amount: Option<f64>,
+}
+
+#[derive(Deserialize)]
+struct PlaceReq {
+    wallet: String,
+    symbol: String,
+    claim: String,
+    side: String,
+    price: Option<f64>,
+    qty: u64,
+    client_id: String,
+    post_only: Option<bool>,
+    order_type: Option<String>,
+}
+
+fn key(symbol: &str, claim: &str) -> String {
+    format!("{}:{}", symbol.to_uppercase(), claim.to_uppercase())
+}
+fn error(message: impl ToString) -> (StatusCode, String) {
+    (StatusCode::BAD_REQUEST, message.to_string())
+}
+fn now() -> u64 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
+}
+
+fn account_mut<'a>(app: &'a mut App, wallet: &str) -> &'a mut Account {
+    app.accounts
+        .entry(wallet.to_string())
+        .or_insert_with(|| Account {
+            wallet: wallet.to_string(),
+            ..Default::default()
+        })
+}
+
+fn ensure_book(app: &mut App, book_key: &str) {
+    if app.books.contains_key(book_key) {
+        return;
+    }
+    let symbol = book_key.split(':').next().unwrap_or("MILK");
+    let reference = app
+        .markets
+        .iter()
+        .find(|item| item.symbol == symbol)
+        .map(|item| item.reference)
+        .unwrap_or(12.5);
+    let maker = "rawmarket-demo-liquidity".to_string();
+    let maker_account = account_mut(app, &maker);
+    maker_account.cash = 1_000_000.0;
+    maker_account
+        .positions
+        .entry(book_key.to_string())
+        .or_insert(Position {
+            available: 10_000,
+            reserved: 0,
+        });
+    let step = (reference * 0.002).max(0.01);
+    let quantities = [100, 150, 200, 250, 300, 400, 500];
+    let mut book = Book::default();
+    for (index, qty) in quantities.into_iter().enumerate() {
+        for (side, price, client_id) in [
+            (
+                Side::Short,
+                reference + step * (index as f64 + 1.0),
+                format!("seed-ask-{index}"),
+            ),
+            (
+                Side::Long,
+                reference - step * (index as f64 + 1.0),
+                format!("seed-bid-{index}"),
+            ),
+        ] {
+            let ticks = (price * 100.0).round() as u64;
+            let displayed = ticks as f64 / 100.0;
+            let id = Uuid::new_v4();
+            let _ = book.place(Order {
+                id,
+                client_id,
+                owner: maker.clone(),
+                side,
+                price_ticks: ticks,
+                qty,
+                remaining: qty,
+                post_only: false,
+                immediate_or_cancel: false,
+                seq: 0,
+            });
+            app.tracked.insert(
+                id,
+                Tracked {
+                    wallet: maker.clone(),
+                    key: book_key.into(),
+                    side,
+                    price: displayed,
+                    qty,
+                    remaining: qty,
+                    filled: 0,
+                    status: "open".into(),
+                    order_type: "limit".into(),
+                    created_at: now(),
+                },
+            );
+        }
+    }
+    app.books.insert(book_key.into(), book);
+}
+
+fn account_view(app: &App, wallet: &str) -> AccountView {
+    let account = app
+        .accounts
+        .get(wallet)
+        .cloned()
+        .unwrap_or_else(|| Account {
+            wallet: wallet.into(),
+            ..Default::default()
+        });
+    AccountView {
+        wallet: account.wallet,
+        cash: account.cash,
+        reserved_cash: account.reserved_cash,
+        available_cash: account.cash - account.reserved_cash,
+        positions: account.positions,
+        open_orders: app
+            .tracked
+            .values()
+            .filter(|order| {
+                order.wallet == wallet
+                    && order.remaining > 0
+                    && (order.status == "open" || order.status == "partially_filled")
+            })
+            .count(),
+        funded: account.funded,
+    }
+}
+
+fn order_view(id: Uuid, order: &Tracked) -> OrderView {
+    let mut parts = order.key.split(':');
+    OrderView {
+        id,
+        symbol: parts.next().unwrap_or("").into(),
+        claim: parts.next().unwrap_or("").into(),
+        wallet: order.wallet.clone(),
+        side: if order.side == Side::Long {
+            "buy".into()
+        } else {
+            "sell".into()
+        },
+        order_type: order.order_type.clone(),
+        price: order.price,
+        qty: order.qty,
+        filled: order.filled,
+        remaining: order.remaining,
+        status: order.status.clone(),
+        created_at: order.created_at,
+    }
+}
+
+async fn list_markets(State(state): State<Shared>) -> Json<Vec<Market>> {
+    Json(state.lock().unwrap().markets.clone())
+}
+
+async fn fund(
+    State(state): State<Shared>,
+    Json(request): Json<FundReq>,
+) -> Result<Json<AccountView>, (StatusCode, String)> {
+    if request.wallet.trim().is_empty() {
+        return Err(error("wallet is required"));
+    }
+    let mut app = state.lock().unwrap();
+    let account = account_mut(&mut app, &request.wallet);
+    if !account.funded {
+        account.cash += request.amount.unwrap_or(10_000.0).clamp(1.0, 10_000.0);
+        account.funded = true;
+    }
+    Ok(Json(account_view(&app, &request.wallet)))
+}
+
+async fn account(Path(wallet): Path<String>, State(state): State<Shared>) -> Json<AccountView> {
+    let app = state.lock().unwrap();
+    Json(account_view(&app, &wallet))
+}
+
+async fn book(
+    Path((symbol, claim)): Path<(String, String)>,
+    State(state): State<Shared>,
+) -> Json<BookView> {
+    let mut app = state.lock().unwrap();
+    let book_key = key(&symbol, &claim);
+    ensure_book(&mut app, &book_key);
+    let book = app.books.get(&book_key).unwrap();
+    let (bids, asks) = book.snapshot();
+    let levels = |items: Vec<(u64, u64)>| {
+        items
+            .into_iter()
+            .map(|(price, size)| Level {
+                price: price as f64 / 100.0,
+                size,
+                total: price as f64 * size as f64 / 100.0,
+            })
+            .collect()
+    };
+    Json(BookView {
+        symbol: symbol.to_uppercase(),
+        claim: claim.to_uppercase(),
+        bids: levels(bids),
+        asks: levels(asks),
+        last: book.mid().unwrap_or(0) as f64 / 100.0,
+        sequence: book.sequence(),
+    })
+}
+
+async fn place(
+    State(state): State<Shared>,
+    Json(request): Json<PlaceReq>,
+) -> Result<Json<Vec<OrderView>>, (StatusCode, String)> {
+    if request.qty == 0 {
+        return Err(error("quantity must be positive"));
+    }
+    let mut app = state.lock().unwrap();
+    if !app
+        .markets
+        .iter()
+        .any(|item| item.symbol.eq_ignore_ascii_case(&request.symbol))
+    {
+        return Err(error("unknown market"));
+    }
+    let book_key = key(&request.symbol, &request.claim);
+    ensure_book(&mut app, &book_key);
+    let side = match request.side.to_lowercase().as_str() {
+        "buy" => Side::Long,
+        "sell" => Side::Short,
+        _ => return Err(error("side must be buy or sell")),
+    };
+    let order_type = request
+        .order_type
+        .as_deref()
+        .unwrap_or("limit")
+        .to_lowercase();
+    let immediate_or_cancel = order_type == "market";
+    let price_ticks = if immediate_or_cancel {
+        let book = app.books.get(&book_key).unwrap();
+        match side {
+            Side::Long => book.best_ask(),
+            Side::Short => book.best_bid(),
+        }
+        .ok_or_else(|| error("no executable liquidity"))?
+    } else {
+        let price = request
+            .price
+            .ok_or_else(|| error("price is required for a limit order"))?;
+        if !price.is_finite() || price <= 0.0 {
+            return Err(error("price must be positive"));
+        }
+        (price * 100.0).round() as u64
+    };
+    let price = price_ticks as f64 / 100.0;
+    let maximum_cost = price * request.qty as f64;
+    {
+        let account = account_mut(&mut app, &request.wallet);
+        if side == Side::Long && account.cash - account.reserved_cash < maximum_cost {
+            return Err(error("insufficient available demo USD"));
+        }
+        if side == Side::Short {
+            let position = account.positions.entry(book_key.clone()).or_default();
+            if position.available < position.reserved + request.qty {
+                return Err(error(
+                    "sell requires available inventory; naked shorting is disabled",
+                ));
+            }
+        }
+    }
+
+    let id = Uuid::new_v4();
+    let order = Order {
+        id,
+        client_id: request.client_id,
+        owner: request.wallet.clone(),
+        side,
+        price_ticks,
+        qty: request.qty,
+        remaining: request.qty,
+        post_only: request.post_only.unwrap_or(false),
+        immediate_or_cancel,
+        seq: 0,
+    };
+    let (_, fills) = app
+        .books
+        .get_mut(&book_key)
+        .unwrap()
+        .place(order)
+        .map_err(|reason| error(format!("order rejected: {reason:?}")))?;
+
+    {
+        let account = account_mut(&mut app, &request.wallet);
+        if side == Side::Long {
+            account.reserved_cash += maximum_cost;
+        } else {
+            account
+                .positions
+                .entry(book_key.clone())
+                .or_default()
+                .reserved += request.qty;
+        }
+    }
+
+    let mut taker = Tracked {
+        wallet: request.wallet.clone(),
+        key: book_key.clone(),
+        side,
+        price,
+        qty: request.qty,
+        remaining: request.qty,
+        filled: 0,
+        status: "open".into(),
+        order_type: order_type.clone(),
+        created_at: now(),
+    };
+    let mut ids = vec![id];
+    for fill in fills {
+        ids.push(fill.maker);
+        let maker = app
+            .tracked
+            .get(&fill.maker)
+            .cloned()
+            .ok_or_else(|| error("maker state missing"))?;
+        let (buyer, seller) = if side == Side::Long {
+            (taker.clone(), maker.clone())
+        } else {
+            (maker.clone(), taker.clone())
+        };
+        let value = fill.price_ticks as f64 / 100.0 * fill.qty as f64;
+        let held = buyer.price * fill.qty as f64;
+        let buyer_account = account_mut(&mut app, &buyer.wallet);
+        buyer_account.cash = (buyer_account.cash - value).max(0.0);
+        buyer_account.reserved_cash = (buyer_account.reserved_cash - held).max(0.0);
+        buyer_account
+            .positions
+            .entry(book_key.clone())
+            .or_default()
+            .available += fill.qty;
+        let seller_account = account_mut(&mut app, &seller.wallet);
+        seller_account.cash += value;
+        let seller_position = seller_account
+            .positions
+            .entry(book_key.clone())
+            .or_default();
+        seller_position.reserved = seller_position.reserved.saturating_sub(fill.qty);
+        seller_position.available = seller_position.available.saturating_sub(fill.qty);
+        app.fills.push(Trade {
+            id: Uuid::new_v4(),
+            symbol: request.symbol.to_uppercase(),
+            claim: request.claim.to_uppercase(),
+            price: fill.price_ticks as f64 / 100.0,
+            qty: fill.qty,
+            buyer: buyer.wallet,
+            seller: seller.wallet,
+            timestamp: now(),
+        });
+        taker.remaining = taker.remaining.saturating_sub(fill.qty);
+        taker.filled += fill.qty;
+        if let Some(maker_order) = app.tracked.get_mut(&fill.maker) {
+            maker_order.remaining = maker_order.remaining.saturating_sub(fill.qty);
+            maker_order.filled += fill.qty;
+            maker_order.status = if maker_order.remaining == 0 {
+                "filled".into()
+            } else {
+                "partially_filled".into()
+            };
+        }
+    }
+
+    if immediate_or_cancel && taker.remaining > 0 {
+        let unfilled = taker.remaining;
+        let account = account_mut(&mut app, &request.wallet);
+        if side == Side::Long {
+            account.reserved_cash = (account.reserved_cash - price * unfilled as f64).max(0.0);
+        } else {
+            account
+                .positions
+                .entry(book_key.clone())
+                .or_default()
+                .reserved = account
+                .positions
+                .get(&book_key)
+                .map(|position| position.reserved)
+                .unwrap_or(0)
+                .saturating_sub(unfilled);
+        }
+        taker.remaining = 0;
+        taker.status = if taker.filled > 0 {
+            "partially_filled".into()
+        } else {
+            "expired".into()
+        };
+    } else {
+        taker.status = if taker.remaining == 0 {
+            "filled".into()
+        } else if taker.filled > 0 {
+            "partially_filled".into()
+        } else {
+            "open".into()
+        };
+    }
+    app.tracked.insert(id, taker);
+    let result = ids
+        .into_iter()
+        .filter_map(|order_id| {
+            app.tracked
+                .get(&order_id)
+                .map(|order| order_view(order_id, order))
+        })
+        .collect();
+    Ok(Json(result))
+}
+
+async fn cancel(
+    Path(id): Path<Uuid>,
+    State(state): State<Shared>,
+) -> Result<Json<OrderView>, (StatusCode, String)> {
+    let mut app = state.lock().unwrap();
+    let order = app
+        .tracked
+        .get(&id)
+        .cloned()
+        .ok_or_else(|| error("unknown order"))?;
+    if order.remaining == 0 {
+        return Err(error("order is already inactive"));
+    }
+    app.books
+        .get_mut(&order.key)
+        .ok_or_else(|| error("book missing"))?
+        .cancel(id)
+        .map_err(|reason| error(format!("cancel rejected: {reason:?}")))?;
+    if let Some(account) = app.accounts.get_mut(&order.wallet) {
+        if order.side == Side::Long {
+            account.reserved_cash =
+                (account.reserved_cash - order.price * order.remaining as f64).max(0.0);
+        } else {
+            account
+                .positions
+                .entry(order.key.clone())
+                .or_default()
+                .reserved = account
+                .positions
+                .get(&order.key)
+                .map(|position| position.reserved)
+                .unwrap_or(0)
+                .saturating_sub(order.remaining);
+        }
+    }
+    let tracked = app.tracked.get_mut(&id).unwrap();
+    tracked.remaining = 0;
+    tracked.status = "cancelled".into();
+    Ok(Json(order_view(id, tracked)))
+}
+
+async fn orders(Path(wallet): Path<String>, State(state): State<Shared>) -> Json<Vec<OrderView>> {
+    let app = state.lock().unwrap();
+    let mut result: Vec<_> = app
+        .tracked
+        .iter()
+        .filter(|(_, order)| order.wallet == wallet)
+        .map(|(id, order)| order_view(*id, order))
+        .collect();
+    result.sort_by_key(|order| std::cmp::Reverse(order.created_at));
+    Json(result)
+}
+
+async fn trades(
+    Path((symbol, claim)): Path<(String, String)>,
+    State(state): State<Shared>,
+) -> Json<Vec<Trade>> {
+    let app = state.lock().unwrap();
+    Json(
+        app.fills
+            .iter()
+            .filter(|trade| {
+                trade.symbol.eq_ignore_ascii_case(&symbol)
+                    && trade.claim.eq_ignore_ascii_case(&claim)
+            })
+            .cloned()
+            .rev()
+            .take(50)
+            .collect(),
+    )
+}
+
+async fn fills(Path(wallet): Path<String>, State(state): State<Shared>) -> Json<Vec<Trade>> {
+    let app = state.lock().unwrap();
+    Json(
+        app.fills
+            .iter()
+            .filter(|trade| trade.buyer == wallet || trade.seller == wallet)
+            .cloned()
+            .rev()
+            .take(100)
+            .collect(),
+    )
+}
+
+async fn candles(
+    Path((symbol, interval)): Path<(String, String)>,
+    State(state): State<Shared>,
+) -> Json<CandleResponse> {
+    let app = state.lock().unwrap();
+    let market = app
+        .markets
+        .iter()
+        .find(|item| item.symbol.eq_ignore_ascii_case(&symbol));
+    let (source_status, coverage, candles) = match market {
+        Some(item) if item.symbol == "MILK" => (
+            "verified USDA fixing".into(),
+            "One official observation captured; no continuous history".into(),
+            vec![Candle {
+                time: "2026-09-02".into(),
+                open: item.reference,
+                high: item.reference,
+                low: item.reference,
+                close: item.reference,
+                volume: 0.0,
+                source: "USDA Class III announcement".into(),
+            }],
+        ),
+        Some(_) => (
+            "historical/demo; not chartable as live market data".into(),
+            "No verified compatible fixing series loaded".into(),
+            vec![],
+        ),
+        None => ("unknown market".into(), "No data".into(), vec![]),
+    };
+    Json(CandleResponse {
+        interval,
+        source_status,
+        coverage,
+        candles,
+    })
+}
+
+async fn health() -> Json<serde_json::Value> {
+    Json(serde_json::json!({"status":"ok","service":"rawmarket-engine","version":"0.2.0"}))
+}
+
+#[tokio::main]
+async fn main() {
+    let shared = Arc::new(Mutex::new(App {
+        markets: markets(),
+        books: HashMap::new(),
+        accounts: HashMap::new(),
+        tracked: HashMap::new(),
+        fills: vec![],
+    }));
+    let app = Router::new()
+        .route("/api/markets", get(list_markets))
+        .route("/api/fund", post(fund))
+        .route("/api/account/{wallet}", get(account))
+        .route("/api/book/{symbol}/{claim}", get(book))
+        .route("/api/trades/{symbol}/{claim}", get(trades))
+        .route("/api/candles/{symbol}/{interval}", get(candles))
+        .route("/api/fills/{wallet}", get(fills))
+        .route("/api/orders", post(place))
+        .route("/api/orders/{id}", get(orders).delete(cancel))
+        .route("/health", get(health))
+        .layer(CorsLayer::permissive())
+        .with_state(shared);
+    let port = std::env::var("PORT").unwrap_or_else(|_| "8080".into());
+    let address = format!("0.0.0.0:{port}");
+    let listener = tokio::net::TcpListener::bind(&address).await.unwrap();
+    println!("RawMarket engine listening on {address}");
+    axum::serve(listener, app).await.unwrap();
+}

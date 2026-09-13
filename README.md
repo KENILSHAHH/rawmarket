@@ -37,6 +37,8 @@ RawMarket presents one US-facing market family for each product, with no state-s
 
 The user can connect the demo wallet, receive demo USD, view depth, and place buy or sell spot limit orders. A sell order requires inventory; the engine does not permit an unfunded short sale.
 
+The public terminal now runs on Next.js 16 and React 19. Each browser receives a persistent demo identity, can claim test funds once per engine session, execute immediate-or-cancel market orders against the displayed book, rest post-only or ordinary limit orders, inspect personal fills and open orders, and cancel orders with reservation release. These are real commands against the AWS-hosted Rust engine, while the balances remain explicitly labelled demo balances rather than user-controlled HTS funds.
+
 ## Product flow
 
 ```text
@@ -128,6 +130,9 @@ Core properties:
 - checked arithmetic at the matching boundary;
 - price-time priority;
 - `BTreeMap<PriceTicks, VecDeque<OrderId>>` book structure;
+- immediate-or-cancel market orders that never leave an unfilled remainder resting;
+- distinct open, partially filled, filled, cancelled, and expired states;
+- one-time process-local test funding and wallet-specific order/fill retrieval;
 - order lookup for cancellation and state changes;
 - limit orders, partial fills, cancellation, and post-only intent;
 - self-trade prevention;

@@ -1,48 +1,308 @@
+use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap, VecDeque};
-use serde::{Serialize, Deserialize};
 use uuid::Uuid;
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
-pub enum Side { Long, Short }
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Order { pub id: Uuid, pub client_id: String, pub owner: String, pub side: Side, pub price_ticks: u64, pub qty: u64, pub remaining: u64, pub post_only: bool, pub seq: u64 }
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
-pub struct Fill { pub maker: Uuid, pub taker: Uuid, pub price_ticks: u64, pub qty: u64, pub seq: u64 }
-#[derive(Default)]
-pub struct Book { bids: BTreeMap<u64, VecDeque<Uuid>>, asks: BTreeMap<u64, VecDeque<Uuid>>, orders: HashMap<Uuid, Order>, clients: HashMap<(String,String),Uuid>, seq: u64 }
-#[derive(Debug, PartialEq, Eq)] pub enum BookError { DuplicateClientId, SelfTrade, PostOnlyWouldCross, Empty, Unknown }
-impl Book {
-    pub fn place(&mut self, mut o: Order) -> Result<(Uuid, Vec<Fill>),BookError> {
-        if o.qty == 0 { return Err(BookError::Empty); }
-        if self.clients.contains_key(&(o.owner.clone(), o.client_id.clone())) { return Err(BookError::DuplicateClientId); }
-        o.remaining=o.qty; o.id=if o.id==Uuid::nil(){Uuid::new_v4()}else{o.id}; self.seq+=1; o.seq=self.seq;
-        if o.post_only && self.would_cross(&o) { return Err(BookError::PostOnlyWouldCross); }
-        let mut fills=Vec::new();
-        loop { let best=self.best_crossing(&o); let Some(mid)=best else {break};
-            if self.orders.get(&mid).map(|m|m.owner==o.owner).unwrap_or(false) { return Err(BookError::SelfTrade); }
-            let (price,mqty)= {let m=&self.orders[&mid];(m.price_ticks,m.remaining)}; let qty=o.remaining.min(mqty);
-            self.seq+=1; fills.push(Fill{maker:mid,taker:o.id,price_ticks:price,qty,seq:self.seq});
-            o.remaining-=qty; let done=o.remaining==0; self.decrement(mid,qty); if done{break;}
-        }
-        if o.remaining>0 { self.insert(o.clone()); }
-        self.clients.insert((o.owner.clone(),o.client_id.clone()),o.id); Ok((o.id,fills))
-    }
-    fn insert(&mut self,o:Order){let map=match o.side{Side::Long=>&mut self.bids,Side::Short=>&mut self.asks};map.entry(o.price_ticks).or_default().push_back(o.id);self.orders.insert(o.id,o);}
-    fn decrement(&mut self,id:Uuid,qty:u64){let remove={let x=self.orders.get_mut(&id).unwrap();x.remaining-=qty;x.remaining==0};if remove{self.orders.remove(&id);for map in [&mut self.bids,&mut self.asks]{for q in map.values_mut(){q.retain(|x|*x!=id);}}}}
-    fn would_cross(&self,o:&Order)->bool{match o.side{Side::Long=>self.asks.keys().next().map(|p|*p<=o.price_ticks).unwrap_or(false),Side::Short=>self.bids.keys().next_back().map(|p|*p>=o.price_ticks).unwrap_or(false)}}
-    fn best_crossing(&self,o:&Order)->Option<Uuid>{match o.side{Side::Long=>self.asks.iter().filter(|(p,q)|**p<=o.price_ticks && !q.is_empty()).next().and_then(|(_,q)|q.front()).copied(),Side::Short=>self.bids.iter().rev().filter(|(p,q)|**p>=o.price_ticks && !q.is_empty()).next().and_then(|(_,q)|q.front()).copied()}}
-    pub fn cancel(&mut self,id:Uuid)->Result<Order,BookError>{let o=self.orders.remove(&id).ok_or(BookError::Unknown)?;for map in [&mut self.bids,&mut self.asks]{for q in map.values_mut(){q.retain(|x|*x!=id);}}Ok(o)}
-    pub fn mid(&self)->Option<u64>{match (self.bids.keys().next_back(),self.asks.keys().next()){(Some(b),Some(a))=>Some((*b+*a)/2),_=>None}}
-    pub fn snapshot(&self)->(Vec<(u64,u64)>,Vec<(u64,u64)>){
-        let bids=self.bids.iter().rev().filter_map(|(p,q)|{let n=q.iter().filter_map(|id|self.orders.get(id).map(|o|o.remaining)).sum();(n>0).then_some((*p,n))}).collect();
-        let asks=self.asks.iter().filter_map(|(p,q)|{let n=q.iter().filter_map(|id|self.orders.get(id).map(|o|o.remaining)).sum();(n>0).then_some((*p,n))}).collect();
-        (bids,asks)
-    }
-    pub fn order(&self,id:Uuid)->Option<Order>{self.orders.get(&id).cloned()}
-    pub fn sequence(&self)->u64{self.seq}
+pub enum Side {
+    Long,
+    Short,
 }
-pub fn payout(m:u64,cap:u64,s:u64)->(u64,u64){let x=s.min(cap);(m*x,m*(cap-x))}
-#[cfg(test)] mod tests {use super::*;fn o(owner:&str,side:Side,p:u64,q:u64,c:&str)->Order{Order{id:Uuid::nil(),client_id:c.into(),owner:owner.into(),side,price_ticks:p,qty:q,remaining:0,post_only:false,seq:0}}
-#[test]fn priority_and_resting_price(){let mut b=Book::default();let(a,_)=b.place(o("a",Side::Short,105,3,"a")).unwrap();let(c,_)=b.place(o("c",Side::Short,104,2,"c")).unwrap();let(_,f)=b.place(o("t",Side::Long,106,4,"t")).unwrap();assert_eq!(f.iter().map(|x|x.price_ticks).collect::<Vec<_>>(),vec![104,105]);assert_eq!(f.iter().map(|x|x.qty).sum::<u64>(),4);assert!(b.cancel(a).is_ok());assert!(b.cancel(c).is_err());}
-#[test]fn self_trade_and_replay(){let mut b=Book::default();b.place(o("a",Side::Short,100,1,"x")).unwrap();assert_eq!(b.place(o("a",Side::Long,101,1,"y")),Err(BookError::SelfTrade));assert_eq!(b.place(o("a",Side::Short,99,1,"x")),Err(BookError::DuplicateClientId));}
-#[test]fn bounded_complementary_payout(){assert_eq!(payout(2000,25,30),(50000,0));assert_eq!(payout(1,20,7),(7,13));}}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Order {
+    pub id: Uuid,
+    pub client_id: String,
+    pub owner: String,
+    pub side: Side,
+    pub price_ticks: u64,
+    pub qty: u64,
+    pub remaining: u64,
+    pub post_only: bool,
+    pub immediate_or_cancel: bool,
+    pub seq: u64,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct Fill {
+    pub maker: Uuid,
+    pub taker: Uuid,
+    pub price_ticks: u64,
+    pub qty: u64,
+    pub seq: u64,
+}
+
+#[derive(Default)]
+pub struct Book {
+    bids: BTreeMap<u64, VecDeque<Uuid>>,
+    asks: BTreeMap<u64, VecDeque<Uuid>>,
+    orders: HashMap<Uuid, Order>,
+    clients: HashMap<(String, String), Uuid>,
+    seq: u64,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum BookError {
+    DuplicateClientId,
+    SelfTrade,
+    PostOnlyWouldCross,
+    Empty,
+    Unknown,
+}
+
+impl Book {
+    pub fn place(&mut self, mut order: Order) -> Result<(Uuid, Vec<Fill>), BookError> {
+        if order.qty == 0 {
+            return Err(BookError::Empty);
+        }
+        if self
+            .clients
+            .contains_key(&(order.owner.clone(), order.client_id.clone()))
+        {
+            return Err(BookError::DuplicateClientId);
+        }
+        order.remaining = order.qty;
+        order.id = if order.id == Uuid::nil() {
+            Uuid::new_v4()
+        } else {
+            order.id
+        };
+        self.seq += 1;
+        order.seq = self.seq;
+        if order.post_only && self.would_cross(&order) {
+            return Err(BookError::PostOnlyWouldCross);
+        }
+
+        let mut fills = Vec::new();
+        loop {
+            let Some(maker_id) = self.best_crossing(&order) else {
+                break;
+            };
+            if self
+                .orders
+                .get(&maker_id)
+                .map(|maker| maker.owner == order.owner)
+                .unwrap_or(false)
+            {
+                return Err(BookError::SelfTrade);
+            }
+            let (price_ticks, maker_qty) = {
+                let maker = &self.orders[&maker_id];
+                (maker.price_ticks, maker.remaining)
+            };
+            let qty = order.remaining.min(maker_qty);
+            self.seq += 1;
+            fills.push(Fill {
+                maker: maker_id,
+                taker: order.id,
+                price_ticks,
+                qty,
+                seq: self.seq,
+            });
+            order.remaining -= qty;
+            self.decrement(maker_id, qty);
+            if order.remaining == 0 {
+                break;
+            }
+        }
+
+        if order.remaining > 0 && !order.immediate_or_cancel {
+            self.insert(order.clone());
+        }
+        self.clients
+            .insert((order.owner.clone(), order.client_id.clone()), order.id);
+        Ok((order.id, fills))
+    }
+
+    fn insert(&mut self, order: Order) {
+        let levels = match order.side {
+            Side::Long => &mut self.bids,
+            Side::Short => &mut self.asks,
+        };
+        levels
+            .entry(order.price_ticks)
+            .or_default()
+            .push_back(order.id);
+        self.orders.insert(order.id, order);
+    }
+
+    fn decrement(&mut self, id: Uuid, qty: u64) {
+        let remove = {
+            let order = self.orders.get_mut(&id).unwrap();
+            order.remaining -= qty;
+            order.remaining == 0
+        };
+        if remove {
+            self.orders.remove(&id);
+            for levels in [&mut self.bids, &mut self.asks] {
+                for queue in levels.values_mut() {
+                    queue.retain(|candidate| *candidate != id);
+                }
+            }
+        }
+    }
+
+    fn would_cross(&self, order: &Order) -> bool {
+        match order.side {
+            Side::Long => self
+                .asks
+                .keys()
+                .next()
+                .map(|price| *price <= order.price_ticks)
+                .unwrap_or(false),
+            Side::Short => self
+                .bids
+                .keys()
+                .next_back()
+                .map(|price| *price >= order.price_ticks)
+                .unwrap_or(false),
+        }
+    }
+
+    fn best_crossing(&self, order: &Order) -> Option<Uuid> {
+        match order.side {
+            Side::Long => self
+                .asks
+                .iter()
+                .find(|(price, queue)| **price <= order.price_ticks && !queue.is_empty())
+                .and_then(|(_, queue)| queue.front())
+                .copied(),
+            Side::Short => self
+                .bids
+                .iter()
+                .rev()
+                .find(|(price, queue)| **price >= order.price_ticks && !queue.is_empty())
+                .and_then(|(_, queue)| queue.front())
+                .copied(),
+        }
+    }
+
+    pub fn cancel(&mut self, id: Uuid) -> Result<Order, BookError> {
+        let order = self.orders.remove(&id).ok_or(BookError::Unknown)?;
+        for levels in [&mut self.bids, &mut self.asks] {
+            for queue in levels.values_mut() {
+                queue.retain(|candidate| *candidate != id);
+            }
+        }
+        Ok(order)
+    }
+
+    pub fn best_bid(&self) -> Option<u64> {
+        self.bids.keys().next_back().copied()
+    }
+    pub fn best_ask(&self) -> Option<u64> {
+        self.asks.keys().next().copied()
+    }
+    pub fn mid(&self) -> Option<u64> {
+        match (self.best_bid(), self.best_ask()) {
+            (Some(bid), Some(ask)) => Some((bid + ask) / 2),
+            _ => None,
+        }
+    }
+
+    pub fn snapshot(&self) -> (Vec<(u64, u64)>, Vec<(u64, u64)>) {
+        let bids = self
+            .bids
+            .iter()
+            .rev()
+            .filter_map(|(price, queue)| {
+                let size = queue
+                    .iter()
+                    .filter_map(|id| self.orders.get(id).map(|order| order.remaining))
+                    .sum();
+                (size > 0).then_some((*price, size))
+            })
+            .collect();
+        let asks = self
+            .asks
+            .iter()
+            .filter_map(|(price, queue)| {
+                let size = queue
+                    .iter()
+                    .filter_map(|id| self.orders.get(id).map(|order| order.remaining))
+                    .sum();
+                (size > 0).then_some((*price, size))
+            })
+            .collect();
+        (bids, asks)
+    }
+
+    pub fn order(&self, id: Uuid) -> Option<Order> {
+        self.orders.get(&id).cloned()
+    }
+    pub fn sequence(&self) -> u64 {
+        self.seq
+    }
+}
+
+pub fn payout(multiplier: u64, cap: u64, settlement: u64) -> (u64, u64) {
+    let bounded = settlement.min(cap);
+    (multiplier * bounded, multiplier * (cap - bounded))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    fn order(owner: &str, side: Side, price_ticks: u64, qty: u64, client: &str) -> Order {
+        Order {
+            id: Uuid::nil(),
+            client_id: client.into(),
+            owner: owner.into(),
+            side,
+            price_ticks,
+            qty,
+            remaining: 0,
+            post_only: false,
+            immediate_or_cancel: false,
+            seq: 0,
+        }
+    }
+
+    #[test]
+    fn priority_and_resting_price() {
+        let mut book = Book::default();
+        let (first, _) = book.place(order("a", Side::Short, 105, 3, "a")).unwrap();
+        let (better, _) = book.place(order("c", Side::Short, 104, 2, "c")).unwrap();
+        let (_, fills) = book.place(order("t", Side::Long, 106, 4, "t")).unwrap();
+        assert_eq!(
+            fills
+                .iter()
+                .map(|fill| fill.price_ticks)
+                .collect::<Vec<_>>(),
+            vec![104, 105]
+        );
+        assert_eq!(fills.iter().map(|fill| fill.qty).sum::<u64>(), 4);
+        assert!(book.cancel(first).is_ok());
+        assert!(book.cancel(better).is_err());
+    }
+
+    #[test]
+    fn self_trade_and_replay() {
+        let mut book = Book::default();
+        book.place(order("a", Side::Short, 100, 1, "x")).unwrap();
+        assert_eq!(
+            book.place(order("a", Side::Long, 101, 1, "y")),
+            Err(BookError::SelfTrade)
+        );
+        assert_eq!(
+            book.place(order("a", Side::Short, 99, 1, "x")),
+            Err(BookError::DuplicateClientId)
+        );
+    }
+
+    #[test]
+    fn immediate_or_cancel_does_not_rest() {
+        let mut book = Book::default();
+        let mut ioc = order("a", Side::Long, 100, 3, "ioc");
+        ioc.immediate_or_cancel = true;
+        let (id, fills) = book.place(ioc).unwrap();
+        assert!(fills.is_empty());
+        assert!(book.order(id).is_none());
+        assert!(book.snapshot().0.is_empty());
+    }
+
+    #[test]
+    fn bounded_complementary_payout() {
+        assert_eq!(payout(2000, 25, 30), (50000, 0));
+        assert_eq!(payout(1, 20, 7), (7, 13));
+    }
+}

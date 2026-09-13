@@ -1,12 +1,14 @@
 openapi: 3.1.0
 info:
   title: RawMarket Trading API
-  version: 0.1.0-demo
+  version: 0.2.0-demo
   description: |
     Spot commodity trading API for RawMarket. The current implementation is a
     local/testnet demo. It must not be used with production capital: wallet is
     not authentication and account state is process-local.
 servers:
+  - url: https://qr87wwmycq.us-east-1.awsapprunner.com
+    description: Public AWS App Runner demo engine
   - url: http://localhost:8080
     description: Local Rust engine
 tags:
@@ -23,8 +25,13 @@ paths:
         '200':
           description: Engine is running
           content:
-            text/plain:
-              schema: {type: string, example: ok}
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: {type: string, example: ok}
+                  service: {type: string, example: rawmarket-engine}
+                  version: {type: string, example: 0.2.0}
   /api/markets:
     get:
       tags: [Markets]
@@ -91,6 +98,20 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/Account'}
+  /api/fills/{wallet}:
+    get:
+      tags: [Account]
+      operationId: getWalletFills
+      parameters:
+        - {$ref: '#/components/parameters/Wallet'}
+      responses:
+        '200':
+          description: Fills where the wallet was buyer or seller
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/Trade'}
   /api/fund:
     post:
       tags: [Account]
@@ -116,7 +137,7 @@ paths:
     post:
       tags: [Trading]
       operationId: placeSpotOrder
-      description: Places a spot limit order and attempts immediate matching.
+      description: Places a limit or immediate-or-cancel market order.
       requestBody:
         required: true
         content:
@@ -132,6 +153,23 @@ paths:
                 items: {$ref: '#/components/schemas/Order'}
         '400': {$ref: '#/components/responses/BadRequest'}
   /api/orders/{id}:
+    get:
+      tags: [Trading]
+      operationId: listWalletOrders
+      description: For GET requests, the path value is interpreted as a wallet identifier.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: {type: string, example: bot-001}
+      responses:
+        '200':
+          description: Wallet order history
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/Order'}
     delete:
       tags: [Trading]
       operationId: cancelOrder
@@ -222,7 +260,7 @@ components:
         reserved: {type: integer, format: uint64}
     Account:
       type: object
-      required: [wallet, cash, reserved_cash, available_cash, positions, open_orders]
+      required: [wallet, cash, reserved_cash, available_cash, positions, open_orders, funded]
       properties:
         wallet: {type: string}
         cash: {type: number, format: double}
@@ -232,9 +270,10 @@ components:
           type: object
           additionalProperties: {$ref: '#/components/schemas/Position'}
         open_orders: {type: integer}
+        funded: {type: boolean}
     PlaceOrderRequest:
       type: object
-      required: [wallet, symbol, claim, side, price, qty, client_id]
+      required: [wallet, symbol, claim, side, qty, client_id]
       properties:
         wallet: {type: string, example: bot-001}
         symbol: {type: string, example: MILK}
@@ -244,18 +283,23 @@ components:
         qty: {type: integer, format: uint64, minimum: 1}
         client_id: {type: string, minLength: 1, maxLength: 128}
         post_only: {type: boolean, default: false}
+        order_type: {type: string, enum: [limit, market], default: limit}
     Order:
       type: object
-      required: [id, symbol, claim, wallet, side, price, remaining, status]
+      required: [id, symbol, claim, wallet, side, order_type, price, qty, filled, remaining, status, created_at]
       properties:
         id: {type: string, format: uuid}
         symbol: {type: string}
         claim: {type: string, enum: [SPOT]}
         wallet: {type: string}
         side: {type: string, enum: [buy, sell]}
+        order_type: {type: string, enum: [limit, market]}
         price: {type: number, format: double}
+        qty: {type: integer, format: uint64}
+        filled: {type: integer, format: uint64}
         remaining: {type: integer, format: uint64}
-        status: {type: string}
+        status: {type: string, enum: [open, partially_filled, filled, cancelled, expired]}
+        created_at: {type: integer, format: uint64}
     Trade:
       type: object
       properties:
@@ -264,4 +308,6 @@ components:
         claim: {type: string}
         price: {type: number, format: double}
         qty: {type: integer, format: uint64}
+        buyer: {type: string}
+        seller: {type: string}
         timestamp: {type: integer, format: uint64}
