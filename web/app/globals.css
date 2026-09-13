@@ -11,3 +11,18 @@ footer{height:31px;padding:0 14px;display:flex;align-items:center;justify-conten
 @media(max-width:1180px){.market-stat:nth-of-type(5),.market-stat:nth-of-type(6){display:none}.market-workspace{grid-template-columns:minmax(420px,1fr) 270px}.workspace{grid-template-columns:minmax(650px,1fr) 310px}.hedera-badge{display:none}}
 @media(max-width:900px){.topbar nav,.engine-badge{display:none}.brand{min-width:auto}.mobile-menu{display:block}.top-actions{margin-left:auto}.market-bar{overflow-x:auto}.market-picker{min-width:250px}.market-stat{min-width:140px}.workspace{height:auto;min-height:0;display:block}.market-workspace{height:690px}.order-ticket{border:0;border-top:1px solid var(--line);padding:18px;display:grid;grid-template-columns:1fr 1fr;gap:0 16px}.ticket-heading,.side-switch,.type-tabs,.order-review,.submit-order,.risk-copy,.toast{grid-column:1/3}.account-summary{align-self:end}.portfolio{height:230px}.modal-backdrop{padding-top:65px}}
 @media(max-width:640px){.topbar{padding:0 11px}.wallet-button span,.hedera-badge{display:none}.market-bar{height:76px}.market-picker{min-width:235px}.market-stat{padding:14px;min-width:125px}.workspace-main{overflow:hidden}.notice-strip{padding:0 10px}.notice-strip span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.notice-strip button{display:none}.market-workspace{display:block;height:auto}.chart-card{height:410px;border-right:0;border-bottom:1px solid var(--line)}.book-card{height:385px}.trades-card{height:180px}.order-ticket{display:block}.account-summary{margin-top:13px}.portfolio-tabs{overflow:auto;gap:14px}.portfolio-value{display:none}.table-head,.table-row{min-width:680px}.balance-grid{grid-template-columns:1fr 1fr}.balance-grid>div{padding:15px}.market-list-head,.market-list>button{grid-template-columns:1.7fr .8fr .9fr}.market-list-head span:nth-child(3),.market-list>button>span{display:none}footer div:nth-child(2){display:none}}
+
+/* Production terminal density */
+.topbar{height:52px;padding:0 16px;background:rgba(9,13,17,.96)}
+.brand{min-width:176px;font-size:14px;gap:9px}.brand-glyph{width:24px;height:24px}.brand-glyph span{width:6px}.brand-glyph span:nth-child(1){height:10px}.brand-glyph span:nth-child(2){height:16px}.brand-glyph span:nth-child(3){height:22px}
+.topbar nav{gap:3px}.topbar nav button{padding:0 14px;font-size:11px}.topbar nav button.active:after{left:14px;right:14px}
+.network-pill{height:31px;border:1px solid var(--line);border-radius:5px;display:flex;align-items:center;gap:6px;padding:0 9px;color:#a9b4bc;font:9px var(--mono);text-transform:uppercase;letter-spacing:.04em}.network-pill:hover{border-color:#43515c;color:var(--text)}
+.wallet-button{height:33px;border-radius:5px}
+.market-bar{height:72px}.market-stat{padding:12px 18px;gap:4px}
+.workspace{height:calc(100vh - 52px - 72px - 220px - 28px)}
+.chart-canvas .chart-empty svg,.chart-canvas .source-pill svg{position:static;width:auto;height:auto}
+.portfolio{height:220px}.data-table,.balance-grid{height:173px}
+footer{height:28px}footer a,footer button{display:flex;align-items:center;gap:3px;margin-left:13px;color:inherit;font:inherit;text-transform:inherit;letter-spacing:inherit}footer a:hover,footer button:hover{color:var(--text)}
+@media(max-width:1180px){.network-pill{display:none}}
+@media(max-width:900px){.topbar nav{display:none}.workspace{height:auto;min-height:0}.ticket-heading,.side-switch,.type-tabs,.order-review,.submit-order,.toast{grid-column:1/3}}
+@media(max-width:640px){.network-pill{display:flex}.network-pill span,.network-pill svg:last-child{display:none}.market-bar{height:72px}.market-stat{padding:12px 14px}}
